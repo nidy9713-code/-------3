@@ -38,16 +38,19 @@ export function SectionCard({ title, children, actions }) {
   );
 }
 
-export function ActionButton({ children, onClick, variant = "primary" }) {
+export function ActionButton({ children, onClick, variant = "primary", disabled, ...rest }) {
   const styles = {
-    primary: "bg-emerald-600 text-white hover:bg-emerald-700",
-    outline: "border border-slate-200 text-slate-700 hover:bg-slate-50",
-    danger: "text-rose-600 hover:bg-rose-50"
+    primary: "bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50",
+    outline: "border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50",
+    danger: "text-rose-600 hover:bg-rose-50 disabled:opacity-50"
   };
   return (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
       className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${styles[variant]}`}
+      {...rest}
     >
       {children}
     </button>
@@ -89,20 +92,30 @@ export function Select({ options, ...props }) {
   );
 }
 
-export function EmptyState({ message, icon = "📝" }) {
+export function EmptyState({ message, icon = "📝", variant = "default" }) {
+  const isError = variant === "error";
   return (
     <div className="flex flex-col items-center justify-center py-10 text-center">
-      <span className="mb-3 text-4xl" role="img" aria-label="empty">
+      <span className="mb-3 text-4xl" role="img" aria-label={isError ? "ошибка" : "empty"}>
         {icon}
       </span>
-      <p className="text-sm font-medium text-slate-500">{message}</p>
-      <p className="mt-1 text-xs text-slate-400">Начните вводить данные выше, чтобы увидеть их здесь</p>
+      <p
+        className={`max-w-md text-sm font-medium ${isError ? "text-rose-800" : "text-slate-500"}`}
+      >
+        {message}
+      </p>
+      {!isError ? (
+        <p className="mt-1 text-xs text-slate-400">Начните вводить данные выше, чтобы увидеть их здесь</p>
+      ) : (
+        <p className="mt-2 text-xs text-slate-500">Нажмите «Повторить» в уведомлении над вкладками.</p>
+      )}
     </div>
   );
 }
 
 export function ProgressBar({ label, value, max, unit = "ккал" }) {
-  const percentage = Math.min(100, (value / max) * 100);
+  const safeMax = max > 0 ? max : 1;
+  const percentage = Math.min(100, (Number(value) / safeMax) * 100);
   return (
     <div>
       <div className="mb-2 flex justify-between text-sm font-medium text-slate-700">
