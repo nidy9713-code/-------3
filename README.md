@@ -91,3 +91,5 @@ npm run preview
 ## Структура данных
 
 Ожидаются таблицы `profiles`, `nutrition_entries`, `workout_entries` (и опционально `daily_summaries`), как в вашем SQL для Supabase.
+
+Для **изменения и удаления** записей в дневниках в политиках RLS для `nutrition_entries` и `workout_entries` должны быть разрешены не только `SELECT` и `INSERT`, но и **`UPDATE` и `DELETE`** для строк с `user_id = auth.uid()`.

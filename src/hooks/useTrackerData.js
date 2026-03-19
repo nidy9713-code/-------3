@@ -347,6 +347,101 @@ export function useTrackerData() {
     }
   };
 
+  const updateFood = async (entryId, name, calories) => {
+    if (!supabase || !user?.id || !name?.trim()) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase
+        .from("nutrition_entries")
+        .update({
+          name: name.trim(),
+          calories: Number(calories) || 0
+        })
+        .eq("id", entryId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      await loadNutritionToday(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const deleteFood = async (entryId) => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase
+        .from("nutrition_entries")
+        .delete()
+        .eq("id", entryId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      await loadNutritionToday(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const updateWorkout = async (entryId, { type, durationMin, completed }) => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase
+        .from("workout_entries")
+        .update({
+          type,
+          duration_min: Number(durationMin) || 0,
+          completed: Boolean(completed)
+        })
+        .eq("id", entryId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      await loadWorkoutsToday(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const deleteWorkout = async (entryId) => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase
+        .from("workout_entries")
+        .delete()
+        .eq("id", entryId)
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+      await loadWorkoutsToday(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const totals = useMemo(() => {
     const caloriesToday = nutrition.reduce((sum, f) => sum + Number(f.calories), 0);
     const completedWorkouts = workouts.filter((w) => w.completed).length;
@@ -379,7 +474,11 @@ export function useTrackerData() {
     signOut,
     saveProfile,
     addFood,
+    updateFood,
+    deleteFood,
     addWorkout,
+    updateWorkout,
+    deleteWorkout,
     refreshAll
   };
 }

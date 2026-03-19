@@ -144,6 +144,16 @@ export default function App() {
   const [activePage, setActivePage] = useState("profile");
   const [newFood, setNewFood] = useState({ name: "", calories: "" });
   const [newWorkout, setNewWorkout] = useState({ type: "Бег", duration: "", completed: true });
+  /** Редактирование строки питания */
+  const [editingFoodId, setEditingFoodId] = useState(null);
+  const [foodDraft, setFoodDraft] = useState({ name: "", calories: "" });
+  /** Редактирование строки тренировки */
+  const [editingWorkoutId, setEditingWorkoutId] = useState(null);
+  const [workoutDraft, setWorkoutDraft] = useState({
+    type: "Бег",
+    duration: "",
+    completed: true
+  });
 
   const {
     isSupabaseConfigured,
@@ -168,7 +178,11 @@ export default function App() {
     signOut,
     saveProfile,
     addFood,
+    updateFood,
+    deleteFood,
     addWorkout,
+    updateWorkout,
+    deleteWorkout,
     refreshAll
   } = useTrackerData();
 
@@ -391,12 +405,84 @@ export default function App() {
                 ) : nutrition.length === 0 ? (
                   <EmptyState message="Вы еще не добавили ни одного продукта сегодня" icon="🍎" />
                 ) : (
-                  nutrition.map((f) => (
-                    <div key={f.id} className="flex justify-between border-b border-slate-100 py-2">
-                      <span className="font-medium">{f.name}</span>
-                      <span className="text-slate-600">{f.calories} ккал</span>
-                    </div>
-                  ))
+                  nutrition.map((f) =>
+                    editingFoodId === f.id ? (
+                      <div
+                        key={f.id}
+                        className="flex flex-col gap-3 border-b border-slate-100 py-3 sm:flex-row sm:flex-wrap sm:items-end"
+                      >
+                        <div className="min-w-[160px] flex-1">
+                          <FormField label="Продукт">
+                            <Input
+                              value={foodDraft.name}
+                              onChange={(e) => setFoodDraft({ ...foodDraft, name: e.target.value })}
+                            />
+                          </FormField>
+                        </div>
+                        <div className="w-24">
+                          <FormField label="Ккал">
+                            <Input
+                              type="number"
+                              value={foodDraft.calories}
+                              onChange={(e) => setFoodDraft({ ...foodDraft, calories: e.target.value })}
+                            />
+                          </FormField>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <ActionButton
+                            disabled={isMutating}
+                            onClick={async () => {
+                              const ok = await updateFood(f.id, foodDraft.name, foodDraft.calories);
+                              if (ok) setEditingFoodId(null);
+                            }}
+                          >
+                            Сохранить
+                          </ActionButton>
+                          <ActionButton
+                            variant="outline"
+                            disabled={isMutating}
+                            onClick={() => setEditingFoodId(null)}
+                          >
+                            Отмена
+                          </ActionButton>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        key={f.id}
+                        className="flex flex-col gap-2 border-b border-slate-100 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div>
+                          <span className="font-medium text-slate-900">{f.name}</span>
+                          <span className="ml-2 text-slate-600">{f.calories} ккал</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <ActionButton
+                            variant="outline"
+                            disabled={isMutating}
+                            onClick={() => {
+                              setEditingFoodId(f.id);
+                              setFoodDraft({ name: f.name, calories: String(f.calories ?? "") });
+                            }}
+                          >
+                            Изменить
+                          </ActionButton>
+                          <ActionButton
+                            variant="danger"
+                            disabled={isMutating}
+                            onClick={() => {
+                              if (window.confirm("Удалить эту запись о еде?")) {
+                                void deleteFood(f.id);
+                                if (editingFoodId === f.id) setEditingFoodId(null);
+                              }
+                            }}
+                          >
+                            Удалить
+                          </ActionButton>
+                        </div>
+                      </div>
+                    )
+                  )
                 )}
               </div>
             </SectionCard>
@@ -426,12 +512,21 @@ export default function App() {
                     />
                   </FormField>
                 </div>
+                <label className="flex cursor-pointer items-center gap-2 pb-1 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    checked={newWorkout.completed}
+                    onChange={(e) => setNewWorkout({ ...newWorkout, completed: e.target.checked })}
+                  />
+                  Выполнено
+                </label>
                 <ActionButton onClick={handleAddWorkout} disabled={isMutating}>
                   Добавить
                 </ActionButton>
               </div>
             </SectionCard>
-            <SectionCard title="Завершенные сегодня">
+            <SectionCard title="Тренировки за сегодня">
               <div className="space-y-2">
                 {isRefreshing && workouts.length === 0 ? (
                   <p className="text-sm text-slate-500">Загрузка...</p>
@@ -444,17 +539,109 @@ export default function App() {
                 ) : workouts.length === 0 ? (
                   <EmptyState message="Тренировок за сегодня пока не зафиксировано" icon="👟" />
                 ) : (
-                  workouts.map((w) => (
-                    <div key={w.id} className="flex items-center justify-between border-b border-slate-100 py-2">
-                      <div>
-                        <span className="font-medium">{w.type}</span>
-                        <span className="ml-2 text-sm text-slate-500">{w.duration} мин.</span>
+                  workouts.map((w) =>
+                    editingWorkoutId === w.id ? (
+                      <div
+                        key={w.id}
+                        className="flex flex-col gap-3 border-b border-slate-100 py-3 sm:flex-row sm:flex-wrap sm:items-end"
+                      >
+                        <div className="w-40">
+                          <FormField label="Тип">
+                            <Select
+                              value={workoutDraft.type}
+                              onChange={(e) => setWorkoutDraft({ ...workoutDraft, type: e.target.value })}
+                              options={workoutTypes}
+                            />
+                          </FormField>
+                        </div>
+                        <div className="w-24">
+                          <FormField label="Мин.">
+                            <Input
+                              type="number"
+                              value={workoutDraft.duration}
+                              onChange={(e) =>
+                                setWorkoutDraft({ ...workoutDraft, duration: e.target.value })
+                              }
+                            />
+                          </FormField>
+                        </div>
+                        <label className="flex cursor-pointer items-center gap-2 pb-1 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                            checked={workoutDraft.completed}
+                            onChange={(e) =>
+                              setWorkoutDraft({ ...workoutDraft, completed: e.target.checked })
+                            }
+                          />
+                          Выполнено
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <ActionButton
+                            disabled={isMutating}
+                            onClick={async () => {
+                              const ok = await updateWorkout(w.id, {
+                                type: workoutDraft.type,
+                                durationMin: workoutDraft.duration,
+                                completed: workoutDraft.completed
+                              });
+                              if (ok) setEditingWorkoutId(null);
+                            }}
+                          >
+                            Сохранить
+                          </ActionButton>
+                          <ActionButton
+                            variant="outline"
+                            disabled={isMutating}
+                            onClick={() => setEditingWorkoutId(null)}
+                          >
+                            Отмена
+                          </ActionButton>
+                        </div>
                       </div>
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
-                        {w.completed ? "Выполнено" : "Пропуск"}
-                      </span>
-                    </div>
-                  ))
+                    ) : (
+                      <div
+                        key={w.id}
+                        className="flex flex-col gap-2 border-b border-slate-100 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-slate-900">{w.type}</span>
+                          <span className="text-sm text-slate-500">{w.duration} мин.</span>
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+                            {w.completed ? "Выполнено" : "Пропуск"}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <ActionButton
+                            variant="outline"
+                            disabled={isMutating}
+                            onClick={() => {
+                              setEditingWorkoutId(w.id);
+                              setWorkoutDraft({
+                                type: w.type,
+                                duration: String(w.duration ?? ""),
+                                completed: Boolean(w.completed)
+                              });
+                            }}
+                          >
+                            Изменить
+                          </ActionButton>
+                          <ActionButton
+                            variant="danger"
+                            disabled={isMutating}
+                            onClick={() => {
+                              if (window.confirm("Удалить эту тренировку?")) {
+                                void deleteWorkout(w.id);
+                                if (editingWorkoutId === w.id) setEditingWorkoutId(null);
+                              }
+                            }}
+                          >
+                            Удалить
+                          </ActionButton>
+                        </div>
+                      </div>
+                    )
+                  )
                 )}
               </div>
             </SectionCard>
