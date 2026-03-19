@@ -100,3 +100,24 @@ export function EmptyState({ message, icon = "📝" }) {
     </div>
   );
 }
+
+export function ProgressBar({ label, value, max, unit = "ккал" }) {
+  const percentage = Math.min(100, (value / max) * 100);
+  return (
+    <div>
+      <div className="mb-2 flex justify-between text-sm font-medium text-slate-700">
+        <span>{label}</span>
+        <span>{value} {unit}</span>
+      </div>
+      <div className="h-4 rounded-full bg-slate-200 overflow-hidden shadow-inner">
+        <div
+          className="h-full bg-emerald-500 transition-all duration-500 ease-out"
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        Цель: {max} {unit}
+      </p>
+    </div>
+  );
+}

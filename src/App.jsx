@@ -5,6 +5,7 @@ import {
   FormField,
   Input,
   NavButton,
+  ProgressBar,
   SectionCard,
   Select,
   StatCard
@@ -237,14 +238,13 @@ export default function App() {
                   <StatCard title="Калории сегодня" value={`${totals.caloriesToday} ккал`} hint="Из дневника питания" />
                   <StatCard title="Тренировки" value={`${totals.completedWorkouts}`} hint="Завершено сегодня" />
                 </div>
-                <div className="mt-8 space-y-6">
-                  <div>
-                    <div className="mb-2 flex justify-between text-sm font-medium"><span>Потребление калорий</span><span>{totals.caloriesToday} ккал</span></div>
-                    <div className="h-4 rounded-full bg-slate-200 overflow-hidden">
-                      <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${Math.min(100, (totals.caloriesToday / 2000) * 100)}%` }} />
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">Цель: 2000 ккал (зависит от веса/роста)</p>
-                  </div>
+                <div className="mt-8">
+                  <ProgressBar
+                    label="Потребление калорий"
+                    value={totals.caloriesToday}
+                    max={2000}
+                    unit="ккал"
+                  />
                 </div>
               </>
             )}
