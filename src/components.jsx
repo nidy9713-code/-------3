@@ -88,3 +88,15 @@ export function Select({ options, ...props }) {
     </select>
   );
 }
+
+export function EmptyState({ message, icon = "📝" }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-10 text-center">
+      <span className="mb-3 text-4xl" role="img" aria-label="empty">
+        {icon}
+      </span>
+      <p className="text-sm font-medium text-slate-500">{message}</p>
+      <p className="mt-1 text-xs text-slate-400">Начните вводить данные выше, чтобы увидеть их здесь</p>
+    </div>
+  );
+}

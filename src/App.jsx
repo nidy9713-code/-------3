@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   ActionButton,
+  EmptyState,
   FormField,
   Input,
   NavButton,
@@ -31,11 +32,20 @@ export default function App() {
 
   // Состояние питания
   const [nutrition, setNutrition] = useState([]);
-  const [newFood, setNewFood] = useState({ name: "", calories: 0, protein: 0, fat: 0, carbs: 0 });
+  const [newFood, setNewFood] = useState({ name: "", calories: 0 });
 
   // Состояние тренировок
   const [workouts, setWorkouts] = useState([]);
-  const [newWorkout, setNewWorkout] = useState({ type: "", duration: 0, completed: true });
+  const [newWorkout, setNewWorkout] = useState({ type: "Бег", duration: 0, completed: true });
+
+  const workoutTypes = [
+    { label: "Бег", value: "Бег" },
+    { label: "Силовая", value: "Силовая" },
+    { label: "Йога", value: "Йога" },
+    { label: "Плавание", value: "Плавание" },
+    { label: "Ходьба", value: "Ходьба" },
+    { label: "Другое", value: "Другое" }
+  ];
 
   // Расчеты для прогресса
   const totals = useMemo(() => {
@@ -48,13 +58,12 @@ export default function App() {
   const addFood = () => {
     if (!newFood.name) return;
     setNutrition([...nutrition, { ...newFood, id: Date.now() }]);
-    setNewFood({ name: "", calories: 0, protein: 0, fat: 0, carbs: 0 });
+    setNewFood({ name: "", calories: 0 });
   };
 
   const addWorkout = () => {
-    if (!newWorkout.type) return;
     setWorkouts([...workouts, { ...newWorkout, id: Date.now() }]);
-    setNewWorkout({ type: "", duration: 0, completed: true });
+    setNewWorkout({ type: "Бег", duration: 0, completed: true });
   };
 
   return (
@@ -130,21 +139,40 @@ export default function App() {
         {activePage === "nutrition" && (
           <div className="space-y-6">
             <SectionCard title="Добавить еду">
-              <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-                <div className="sm:col-span-2"><FormField label="Название"><Input value={newFood.name} onChange={(e) => setNewFood({ ...newFood, name: e.target.value })} placeholder="Напр: Курица" /></FormField></div>
-                <FormField label="Ккал"><Input type="number" value={newFood.calories} onChange={(e) => setNewFood({ ...newFood, calories: e.target.value })} /></FormField>
-                <FormField label="Белки (г)"><Input type="number" value={newFood.protein} onChange={(e) => setNewFood({ ...newFood, protein: e.target.value })} /></FormField>
-                <div className="flex items-end"><ActionButton onClick={addFood}>Добавить</ActionButton></div>
+              <div className="flex flex-wrap gap-4 items-end">
+                <div className="flex-1 min-w-[200px]">
+                  <FormField label="Продукт">
+                    <Input
+                      value={newFood.name}
+                      onChange={(e) => setNewFood({ ...newFood, name: e.target.value })}
+                      placeholder="Напр: Яблоко"
+                    />
+                  </FormField>
+                </div>
+                <div className="w-24">
+                  <FormField label="Ккал">
+                    <Input
+                      type="number"
+                      value={newFood.calories}
+                      onChange={(e) => setNewFood({ ...newFood, calories: e.target.value })}
+                    />
+                  </FormField>
+                </div>
+                <ActionButton onClick={addFood}>Добавить</ActionButton>
               </div>
             </SectionCard>
             <SectionCard title="Сегодняшние записи">
               <div className="space-y-2">
-                {nutrition.length === 0 ? <p className="text-sm text-slate-500 italic">Список пуст</p> : nutrition.map((f) => (
-                  <div key={f.id} className="flex justify-between border-b border-slate-100 py-2">
-                    <span className="font-medium">{f.name}</span>
-                    <span className="text-slate-600">{f.calories} ккал / Б:{f.protein}г</span>
-                  </div>
-                ))}
+                {nutrition.length === 0 ? (
+                  <EmptyState message="Вы еще не добавили ни одного продукта сегодня" icon="🍎" />
+                ) : (
+                  nutrition.map((f) => (
+                    <div key={f.id} className="flex justify-between border-b border-slate-100 py-2">
+                      <span className="font-medium">{f.name}</span>
+                      <span className="text-slate-600">{f.calories} ккал</span>
+                    </div>
+                  ))
+                )}
               </div>
             </SectionCard>
           </div>
@@ -153,24 +181,46 @@ export default function App() {
         {/* СТРАНИЦА ТРЕНИРОВОК */}
         {activePage === "workouts" && (
           <div className="space-y-6">
-            <SectionCard title="Записать тренировку">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <FormField label="Тип"><Input value={newWorkout.type} onChange={(e) => setNewWorkout({ ...newWorkout, type: e.target.value })} placeholder="Напр: Бег" /></FormField>
-                <FormField label="Мин."><Input type="number" value={newWorkout.duration} onChange={(e) => setNewWorkout({ ...newWorkout, duration: e.target.value })} /></FormField>
-                <div className="flex items-end"><ActionButton onClick={addWorkout}>Добавить</ActionButton></div>
+            <SectionCard title="Новая тренировка">
+              <div className="flex flex-wrap gap-4 items-end">
+                <div className="w-40">
+                  <FormField label="Тип">
+                    <Select
+                      value={newWorkout.type}
+                      onChange={(e) => setNewWorkout({ ...newWorkout, type: e.target.value })}
+                      options={workoutTypes}
+                    />
+                  </FormField>
+                </div>
+                <div className="w-24">
+                  <FormField label="Мин.">
+                    <Input
+                      type="number"
+                      value={newWorkout.duration}
+                      onChange={(e) => setNewWorkout({ ...newWorkout, duration: e.target.value })}
+                    />
+                  </FormField>
+                </div>
+                <ActionButton onClick={addWorkout}>Добавить</ActionButton>
               </div>
             </SectionCard>
             <SectionCard title="Завершенные сегодня">
               <div className="space-y-2">
-                {workouts.length === 0 ? <p className="text-sm text-slate-500 italic">Тренировок пока нет</p> : workouts.map((w) => (
-                  <div key={w.id} className="flex items-center justify-between border-b border-slate-100 py-2">
-                    <div>
-                      <span className="font-medium">{w.type}</span>
-                      <span className="ml-2 text-sm text-slate-500">{w.duration} мин.</span>
+                {workouts.length === 0 ? (
+                  <EmptyState message="Тренировок за сегодня пока не зафиксировано" icon="👟" />
+                ) : (
+                  workouts.map((w) => (
+                    <div key={w.id} className="flex items-center justify-between border-b border-slate-100 py-2">
+                      <div>
+                        <span className="font-medium">{w.type}</span>
+                        <span className="ml-2 text-sm text-slate-500">{w.duration} мин.</span>
+                      </div>
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+                        Выполнено
+                      </span>
                     </div>
-                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">Выполнено</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </SectionCard>
           </div>
@@ -179,19 +229,25 @@ export default function App() {
         {/* СТРАНИЦА ПРОГРЕССА */}
         {activePage === "progress" && (
           <SectionCard title="Ваш прогресс сегодня">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <StatCard title="Калории сегодня" value={`${totals.caloriesToday} ккал`} hint="Из дневника питания" />
-              <StatCard title="Тренировки" value={`${totals.completedWorkouts}`} hint="Завершено сегодня" />
-            </div>
-            <div className="mt-8 space-y-6">
-              <div>
-                <div className="mb-2 flex justify-between text-sm font-medium"><span>Потребление калорий</span><span>{totals.caloriesToday} ккал</span></div>
-                <div className="h-4 rounded-full bg-slate-200 overflow-hidden">
-                  <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${Math.min(100, (totals.caloriesToday / 2000) * 100)}%` }} />
+            {nutrition.length === 0 && workouts.length === 0 ? (
+              <EmptyState message="Нет данных для расчета прогресса" icon="📊" />
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <StatCard title="Калории сегодня" value={`${totals.caloriesToday} ккал`} hint="Из дневника питания" />
+                  <StatCard title="Тренировки" value={`${totals.completedWorkouts}`} hint="Завершено сегодня" />
                 </div>
-                <p className="mt-1 text-xs text-slate-500">Цель: 2000 ккал (зависит от веса/роста)</p>
-              </div>
-            </div>
+                <div className="mt-8 space-y-6">
+                  <div>
+                    <div className="mb-2 flex justify-between text-sm font-medium"><span>Потребление калорий</span><span>{totals.caloriesToday} ккал</span></div>
+                    <div className="h-4 rounded-full bg-slate-200 overflow-hidden">
+                      <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${Math.min(100, (totals.caloriesToday / 2000) * 100)}%` }} />
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">Цель: 2000 ккал (зависит от веса/роста)</p>
+                  </div>
+                </div>
+              </>
+            )}
           </SectionCard>
         )}
       </main>
