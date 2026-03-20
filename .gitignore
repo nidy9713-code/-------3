@@ -8,16 +8,22 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+frontend/node_modules
 dist
+frontend/dist
 dist-ssr
 *.local
 
-# Секреты (ключи Supabase)
+# Секреты (ключи Supabase) — только во frontend
 .env
 .env.*
-!.env.example
+!**/.env.example
 
-# Editor directories and files
+# Supabase CLI
+backend/supabase/.temp
+backend/supabase/.branches
+
+# Editor
 .vscode/*
 !.vscode/extensions.json
 .idea

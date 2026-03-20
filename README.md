@@ -1,50 +1,76 @@
 # Трекер привычек / целей
 
-Фронтенд на **React + Vite + Tailwind CSS** с данными в **Supabase** (профиль, дневник питания, дневник тренировок, прогресс за сегодня).
+Монорепозиторий: **фронтенд** (React + Vite + Tailwind) и **бэкенд** (Supabase: БД, Auth, RLS).
 
-## Установка SDK и зависимостей
+## Структура папок
 
-В корне проекта:
-
-```bash
-npm install
+```
+├── frontend/          # SPA: UI, вызовы Supabase из браузера
+│   ├── src/
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── package.json
+│   └── .env.example   # скопировать в frontend/.env
+├── backend/           # конфиг Supabase CLI, SQL, описание «серверной» части
+│   ├── supabase/      # config.toml для supabase start
+│   ├── sql/           # опционально: миграции под SQL Editor
+│   └── README.md
+├── package.json       # скрипты-обёртки: dev/build из frontend
+└── README.md
 ```
 
-Пакет `@supabase/supabase-js` уже указан в `package.json` и ставится вместе с остальными зависимостями.
+## Установка и запуск
 
-## Переменные окружения
+Из **корня** репозитория:
 
-1. Скопируйте пример файла окружения:
+```bash
+npm install --prefix frontend
+```
 
-   ```bash
-   copy .env.example .env
-   ```
+Или: `cd frontend` → `npm install`.
 
-   (в PowerShell можно так же использовать `Copy-Item .env.example .env`.)
+Переменные окружения — только в **`frontend/`**:
 
-2. Откройте [Supabase](https://supabase.com) → ваш проект → **Project Settings** → **API**.
+```bash
+cd frontend
+copy .env.example .env
+```
 
-3. В файл `.env` вставьте:
+Вставьте из [Supabase](https://supabase.com) → **Project Settings** → **API**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 
-   - **Project URL** → `VITE_SUPABASE_URL`
-   - **anon public** key → `VITE_SUPABASE_ANON_KEY`
-
-> В **Vite** только переменные с префиксом `VITE_` попадают в клиентский код (`import.meta.env`).
-
-## Запуск проекта
+Запуск dev-сервера **из корня**:
 
 ```bash
 npm run dev
 ```
 
+Или из `frontend`: `npm run dev`.
+
 Откройте в браузере адрес из терминала (обычно `http://localhost:5173`).
+
+> Если раньше лежал `.env` в корне проекта — **перенесите** его в `frontend/.env`.
+
+## Сборка для продакшена
+
+Из корня:
+
+```bash
+npm run build
+npm run preview
+```
+
+Артефакты: `frontend/dist/`.
+
+## Бэкенд (Supabase)
+
+Подробности — в **[backend/README.md](backend/README.md)** (`supabase start`, `config.toml`, папка `sql/`).
 
 ## Локальная разработка: без подтверждения почты и без ручного входа
 
 ### Облачный проект Supabase (supabase.co)
 
-1. **Отключить подтверждение email** — в консоли проекта: **Authentication** → **Providers** → **Email** → выключить **Confirm email** (только для разработки; в проде лучше включить снова).
-2. **Автовход в `npm run dev`** — в `.env` добавьте (пароль не коммитьте):
+1. **Отключить подтверждение email** — **Authentication** → **Providers** → **Email** → выключить **Confirm email** (для разработки).
+2. **Автовход** — в **`frontend/.env`**:
 
    ```env
    VITE_DEV_AUTO_LOGIN=true
@@ -52,44 +78,31 @@ npm run dev
    VITE_DEV_AUTO_LOGIN_PASSWORD=ваш-пароль
    ```
 
-   Создайте этого пользователя заранее (**Authentication** → **Users** или через форму «Регистрация»). После перезапуска `npm run dev` экран входа не показывается.
+   В production автовход не используется (`import.meta.env.DEV`).
 
-   В **production** (`npm run build`) переменная `DEV` выключена — автовход **не выполняется**, даже если строки остались в файле (всё равно не кладите пароли в репозиторий).
+### Локальный Supabase CLI
 
-### Локальный Supabase CLI (`supabase start`)
-
-В каталоге `supabase/config.toml` для локального стека по умолчанию задано `[auth.email] enable_confirmations = false` — подтверждение писем не требуется. Подключайте приложение к URL и ключам, которые выводит `supabase status`.
-
-## Сборка для продакшена
-
-```bash
-npm run build
-npm run preview
-```
+Файл **`backend/supabase/config.toml`**: для локального стека задано `[auth.email] enable_confirmations = false`. Подробности — [backend/README.md](backend/README.md).
 
 ## Авторизация
 
-Таблицы защищены **RLS** для роли `authenticated`. В приложении нужно **войти** (email + пароль через Supabase Auth): зарегистрируйтесь кнопкой «Регистрация» или создайте пользователя в консоли Supabase (**Authentication** → **Users**).
+Таблицы защищены **RLS** для `authenticated`. Вход — email + пароль через Supabase Auth.
 
 ### Если ошибка при входе или регистрации
 
-1. **Подтверждение email** — по умолчанию Supabase не выдаёт сессию, пока пользователь не перейдёт по ссылке из письма. Для разработки: **Authentication** → **Providers** → **Email** → отключить **Confirm email**.
+1. **Подтверждение email** — отключите **Confirm email** для разработки (см. выше).
 2. **Пароль** — минимум **6 символов**.
-3. **Redirect URLs** — **Authentication** → **URL Configuration**: в **Redirect URLs** добавьте точный адрес приложения, например `http://localhost:5173` и `http://127.0.0.1:5173` (и порт **5174**, если Vite выбрал его). **Site URL** можно указать основной локальный URL.
-4. **Пользователь уже есть** — используйте «Войти», а не повторную регистрацию.
+3. **Redirect URLs** — **Authentication** → **URL Configuration**: добавьте `http://localhost:5173` и т.п.
+4. **Пользователь уже есть** — «Войти», не повторная регистрация.
 
-### «Сеть» / Failed to fetch при входе
+### «Сеть» / Failed to fetch
 
-Это ответ браузера, когда запрос к `*.supabase.co` не доходит до сервера.
-
-- Запускайте **`npm run dev`** и заходите по **http://localhost:…**, не открывайте `index.html` с диска (`file://`).
-- **`.env`** в **корне** проекта; в URL **нет** лишнего слэша в конце и **нет** кавычек вокруг значения (или используйте корректные `"…"`).
-- После правок **`.env`** перезапустите dev-сервер.
-- Проверьте, что в браузере открывается ваш **Project URL** из Supabase.
-- Отключите VPN, попробуйте другую сеть; отключите блокировщики и проверьте антивирус/файрвол.
+- Запуск через **`npm run dev`**, не `file://`.
+- **`.env`** в **`frontend/`**; после правок перезапустите dev-сервер.
+- Проверьте VPN, блокировщики, что открывается URL проекта в браузере.
 
 ## Структура данных
 
-Ожидаются таблицы `profiles`, `nutrition_entries`, `workout_entries` (и опционально `daily_summaries`), как в вашем SQL для Supabase.
+Таблицы `profiles`, `nutrition_entries`, `workout_entries` в Supabase.
 
-Для **изменения и удаления** записей в дневниках в политиках RLS для `nutrition_entries` и `workout_entries` должны быть разрешены не только `SELECT` и `INSERT`, но и **`UPDATE` и `DELETE`** для строк с `user_id = auth.uid()`.
+Для **редактирования и удаления** записей в дневниках в RLS нужны **`UPDATE` и `DELETE`** для строк с `user_id = auth.uid()`.
