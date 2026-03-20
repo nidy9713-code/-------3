@@ -103,6 +103,11 @@ npm run preview
 
 ## Структура данных
 
-Таблицы `profiles`, `nutrition_entries`, `workout_entries` в Supabase.
+Таблицы в Supabase (см. **`backend/sql/schema.sql`**):
+- **`profiles`** — данные пользователя и цель калорий.
+- **`nutrition_entries`** — дневник питания (название, ккал, тип приема пищи).
+- **`workout_entries`** — дневник тренировок (тип, длительность, сожженные калории).
+- **`weight_logs`** — история веса.
+- **`goals`** — прочие цели (вода, шаги и т.д.).
 
 Для **редактирования и удаления** записей в дневниках в RLS нужны **`UPDATE` и `DELETE`** для строк с `user_id = auth.uid()`.

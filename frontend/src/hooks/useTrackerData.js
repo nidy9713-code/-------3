@@ -29,6 +29,8 @@ export function useTrackerData() {
   const [dataError, setDataError] = useState("");
 
   const [profile, setProfile] = useState({
+    displayName: "",
+    avatarUrl: "",
     gender: "Мужской",
     height: "",
     weight: "",
@@ -39,6 +41,8 @@ export function useTrackerData() {
 
   const [nutrition, setNutrition] = useState([]);
   const [workouts, setWorkouts] = useState([]);
+  const [weightLogs, setWeightLogs] = useState([]);
+  const [goals, setGoals] = useState([]);
 
   const user = session?.user ?? null;
 
@@ -113,7 +117,7 @@ export function useTrackerData() {
     if (!supabase) return;
     const { data, error } = await supabase
       .from("profiles")
-      .select("gender,height_cm,weight_kg,age,daily_calorie_goal")
+      .select("display_name,avatar_url,gender,height_cm,weight_kg,age,daily_calorie_goal")
       .eq("id", uid)
       .maybeSingle();
 
@@ -124,13 +128,15 @@ export function useTrackerData() {
       if (insErr) throw insErr;
       const { data: created, error: fetchErr } = await supabase
         .from("profiles")
-        .select("gender,height_cm,weight_kg,age,daily_calorie_goal")
+        .select("display_name,avatar_url,gender,height_cm,weight_kg,age,daily_calorie_goal")
         .eq("id", uid)
         .maybeSingle();
       if (fetchErr) throw fetchErr;
       if (!created) return;
       setProfile((p) => ({
         ...p,
+        displayName: created.display_name ?? "",
+        avatarUrl: created.avatar_url ?? "",
         gender: created.gender ?? "Мужской",
         height: created.height_cm != null ? String(created.height_cm) : "",
         weight: created.weight_kg != null ? String(created.weight_kg) : "",
@@ -142,6 +148,8 @@ export function useTrackerData() {
 
     setProfile((p) => ({
       ...p,
+      displayName: data.display_name ?? "",
+      avatarUrl: data.avatar_url ?? "",
       gender: data.gender ?? "Мужской",
       height: data.height_cm != null ? String(data.height_cm) : "",
       weight: data.weight_kg != null ? String(data.weight_kg) : "",
@@ -155,7 +163,7 @@ export function useTrackerData() {
     const { startIso, endIso } = getTodayRangeIso();
     const { data, error } = await supabase
       .from("nutrition_entries")
-      .select("id,name,calories,logged_at")
+      .select("id,name,calories,meal_type,weight_g,logged_at")
       .eq("user_id", uid)
       .gte("logged_at", startIso)
       .lte("logged_at", endIso)
@@ -170,7 +178,7 @@ export function useTrackerData() {
     const { startIso, endIso } = getTodayRangeIso();
     const { data, error } = await supabase
       .from("workout_entries")
-      .select("id,type,duration_min,completed,logged_at")
+      .select("id,type,duration_min,calories_burned,completed,notes,logged_at")
       .eq("user_id", uid)
       .gte("logged_at", startIso)
       .lte("logged_at", endIso)
@@ -180,9 +188,35 @@ export function useTrackerData() {
     setWorkouts(
       (data ?? []).map((w) => ({
         ...w,
-        duration: w.duration_min
+        duration: w.duration_min,
+        caloriesBurned: w.calories_burned
       }))
     );
+  }, []);
+
+  const loadWeightLogs = useCallback(async (uid) => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("weight_logs")
+      .select("id,weight_kg,logged_at")
+      .eq("user_id", uid)
+      .order("logged_at", { ascending: false })
+      .limit(30);
+
+    if (error) throw error;
+    setWeightLogs(data ?? []);
+  }, []);
+
+  const loadGoals = useCallback(async (uid) => {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("goals")
+      .select("id,title,target_value,current_value,unit,deadline,completed")
+      .eq("user_id", uid)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    setGoals(data ?? []);
   }, []);
 
   const refreshAll = useCallback(async () => {
@@ -193,19 +227,23 @@ export function useTrackerData() {
       await Promise.all([
         loadProfile(user.id),
         loadNutritionToday(user.id),
-        loadWorkoutsToday(user.id)
+        loadWorkoutsToday(user.id),
+        loadWeightLogs(user.id),
+        loadGoals(user.id)
       ]);
     } catch (e) {
       setDataError(humanizeDataError(e));
     } finally {
       setIsRefreshing(false);
     }
-  }, [user?.id, loadProfile, loadNutritionToday, loadWorkoutsToday]);
+  }, [user?.id, loadProfile, loadNutritionToday, loadWorkoutsToday, loadWeightLogs, loadGoals]);
 
   useEffect(() => {
     if (!user?.id) {
       setNutrition([]);
       setWorkouts([]);
+      setWeightLogs([]);
+      setGoals([]);
       return;
     }
     refreshAll();
@@ -278,6 +316,8 @@ export function useTrackerData() {
     try {
       const row = {
         id: user.id,
+        display_name: profile.displayName,
+        avatar_url: profile.avatarUrl,
         gender: profile.gender,
         height_cm: profile.height === "" ? null : Number(profile.height),
         weight_kg: profile.weight === "" ? null : Number(profile.weight),
@@ -302,7 +342,7 @@ export function useTrackerData() {
     }
   };
 
-  const addFood = async (name, calories) => {
+  const addFood = async (name, calories, mealType = "Перекус", weightG = null) => {
     if (!supabase || !user?.id || !name) return false;
     setDataError("");
     setIsMutating(true);
@@ -311,6 +351,8 @@ export function useTrackerData() {
         user_id: user.id,
         name: name.trim(),
         calories: Number(calories) || 0,
+        meal_type: mealType,
+        weight_g: weightG ? Number(weightG) : null,
         logged_at: new Date().toISOString()
       });
       if (error) throw error;
@@ -324,30 +366,7 @@ export function useTrackerData() {
     }
   };
 
-  const addWorkout = async (type, durationMin, completed) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
-    setIsMutating(true);
-    try {
-      const { error } = await supabase.from("workout_entries").insert({
-        user_id: user.id,
-        type,
-        duration_min: Number(durationMin) || 0,
-        completed: Boolean(completed),
-        logged_at: new Date().toISOString()
-      });
-      if (error) throw error;
-      await loadWorkoutsToday(user.id);
-      return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
-  };
-
-  const updateFood = async (entryId, name, calories) => {
+  const updateFood = async (entryId, name, calories, mealType, weightG) => {
     if (!supabase || !user?.id || !name?.trim()) return false;
     setDataError("");
     setIsMutating(true);
@@ -356,7 +375,9 @@ export function useTrackerData() {
         .from("nutrition_entries")
         .update({
           name: name.trim(),
-          calories: Number(calories) || 0
+          calories: Number(calories) || 0,
+          meal_type: mealType,
+          weight_g: weightG ? Number(weightG) : null
         })
         .eq("id", entryId)
         .eq("user_id", user.id);
@@ -394,7 +415,32 @@ export function useTrackerData() {
     }
   };
 
-  const updateWorkout = async (entryId, { type, durationMin, completed }) => {
+  const addWorkout = async (type, durationMin, completed, caloriesBurned = 0, notes = "") => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase.from("workout_entries").insert({
+        user_id: user.id,
+        type,
+        duration_min: Number(durationMin) || 0,
+        calories_burned: Number(caloriesBurned) || 0,
+        completed: Boolean(completed),
+        notes: notes.trim(),
+        logged_at: new Date().toISOString()
+      });
+      if (error) throw error;
+      await loadWorkoutsToday(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const updateWorkout = async (entryId, { type, durationMin, completed, caloriesBurned, notes }) => {
     if (!supabase || !user?.id) return false;
     setDataError("");
     setIsMutating(true);
@@ -404,7 +450,9 @@ export function useTrackerData() {
         .update({
           type,
           duration_min: Number(durationMin) || 0,
-          completed: Boolean(completed)
+          calories_burned: Number(caloriesBurned) || 0,
+          completed: Boolean(completed),
+          notes: notes?.trim()
         })
         .eq("id", entryId)
         .eq("user_id", user.id);
@@ -442,10 +490,119 @@ export function useTrackerData() {
     }
   };
 
+  const addWeightLog = async (weightKg) => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase.from("weight_logs").insert({
+        user_id: user.id,
+        weight_kg: Number(weightKg),
+        logged_at: new Date().toISOString()
+      });
+      if (error) throw error;
+      // Также обновим текущий вес в профиле для удобства
+      await supabase.from("profiles").update({ weight_kg: Number(weightKg) }).eq("id", user.id);
+      await Promise.all([loadWeightLogs(user.id), loadProfile(user.id)]);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const deleteWeightLog = async (id) => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase.from("weight_logs").delete().eq("id", id).eq("user_id", user.id);
+      if (error) throw error;
+      await loadWeightLogs(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const addGoal = async (title, targetValue, unit, deadline) => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase.from("goals").insert({
+        user_id: user.id,
+        title: title.trim(),
+        target_value: Number(targetValue),
+        unit,
+        deadline: deadline || null
+      });
+      if (error) throw error;
+      await loadGoals(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const updateGoal = async (id, { title, targetValue, currentValue, unit, deadline, completed }) => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase
+        .from("goals")
+        .update({
+          title,
+          target_value: Number(targetValue),
+          current_value: Number(currentValue),
+          unit,
+          deadline,
+          completed
+        })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      await loadGoals(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const deleteGoal = async (id) => {
+    if (!supabase || !user?.id) return false;
+    setDataError("");
+    setIsMutating(true);
+    try {
+      const { error } = await supabase.from("goals").delete().eq("id", id).eq("user_id", user.id);
+      if (error) throw error;
+      await loadGoals(user.id);
+      return true;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return false;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const totals = useMemo(() => {
     const caloriesToday = nutrition.reduce((sum, f) => sum + Number(f.calories), 0);
+    const caloriesBurnedToday = workouts.filter(w => w.completed).reduce((sum, w) => sum + Number(w.caloriesBurned || 0), 0);
     const completedWorkouts = workouts.filter((w) => w.completed).length;
-    return { caloriesToday, completedWorkouts };
+    return { caloriesToday, caloriesBurnedToday, completedWorkouts };
   }, [nutrition, workouts]);
 
   const calorieGoal = Number(profile.dailyCalorieGoal) || 2000;
@@ -467,6 +624,8 @@ export function useTrackerData() {
     setProfile,
     nutrition,
     workouts,
+    weightLogs,
+    goals,
     totals,
     calorieGoal,
     signIn,
@@ -479,6 +638,11 @@ export function useTrackerData() {
     addWorkout,
     updateWorkout,
     deleteWorkout,
+    addWeightLog,
+    deleteWeightLog,
+    addGoal,
+    updateGoal,
+    deleteGoal,
     refreshAll
   };
 }

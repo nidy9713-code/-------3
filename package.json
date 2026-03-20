@@ -3,7 +3,7 @@
   "private": true,
   "description": "Монорепозиторий: frontend (Vite/React) и backend (Supabase)",
   "scripts": {
-    "dev": "npm run dev --prefix frontend",
+    "dev": "npm run dev --prefix frontend -- --host",
     "build": "npm run build --prefix frontend",
     "preview": "npm run preview --prefix frontend",
     "install:frontend": "npm install --prefix frontend"

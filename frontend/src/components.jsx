@@ -57,22 +57,27 @@ export function ActionButton({ children, onClick, variant = "primary", disabled,
   );
 }
 
-export function FormField({ label, children }) {
+export function FormField({ label, children, error }) {
   return (
-    <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700">
+    <div className="flex flex-col gap-1">
+      <label className="block text-sm font-medium text-slate-700">
         {label}
+        {error && <span className="ml-2 text-xs font-normal text-rose-500">{error}</span>}
       </label>
       {children}
     </div>
   );
 }
 
-export function Input({ ...props }) {
+export function Input({ error, ...props }) {
   return (
     <input
       {...props}
-      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+      className={`w-full rounded-lg border px-3 py-2 text-sm transition focus:outline-none focus:ring-2 ${
+        error 
+          ? "border-rose-300 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20" 
+          : "border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+      }`}
     />
   );
 }
