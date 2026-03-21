@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   ActionButton,
   EmptyState,
@@ -17,6 +17,11 @@ const pages = [
   { key: "nutrition", label: "Питание" },
   { key: "workouts", label: "Тренировки" },
   { key: "progress", label: "Прогресс" }
+];
+
+const adminPages = [
+  ...pages,
+  { key: "admin", label: "Админ" }
 ];
 
 const workoutTypes = [
@@ -72,7 +77,7 @@ function ErrorBanner({ message, onDismiss, onRetry }) {
   );
 }
 
-/** Экран входа */
+/** Экран входа / регистрации */
 function AuthScreen({
   authError,
   setAuthError,
@@ -81,75 +86,106 @@ function AuthScreen({
   onSignIn,
   onSignUp
 }) {
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [authSubmitting, setAuthSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Сброс старых ошибок
+    setAuthError("");
+    setAuthInfo("");
+
+    // Базовая валидация на фронтенде перед отправкой
+    if (!email.includes("@")) {
+      setAuthError("Введите корректный email.");
+      return;
+    }
+    if (password.length < 6) {
+      setAuthError("Пароль должен быть не менее 6 символов.");
+      return;
+    }
+    if (!isLogin && !displayName.trim()) {
+      setAuthError("Пожалуйста, введите ваше имя.");
+      return;
+    }
+
+    setAuthSubmitting(true);
+    try {
+      if (isLogin) {
+        await onSignIn(email, password);
+      } else {
+        await onSignUp(email, password, displayName);
+      }
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-md rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-      <h2 className="text-lg font-semibold text-slate-900">Вход</h2>
-      <p className="mt-1 text-sm text-slate-600">Email и пароль (минимум 6 символов).</p>
-      {authInfo ? (
-        <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          {authInfo}
-          <button
-            type="button"
-            className="ml-2 font-medium text-emerald-800 underline"
-            onClick={() => setAuthInfo("")}
-          >
-            OK
-          </button>
-        </p>
-      ) : null}
+      <h2 className="text-xl font-bold text-slate-900">{isLogin ? "Вход в систему" : "Регистрация"}</h2>
+      <p className="mt-1 text-sm text-slate-500 mb-6">
+        {isLogin ? "Введите свои данные для входа" : "Создайте аккаунт, чтобы начать"}
+      </p>
+
+      {authInfo && (
+        <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 border border-emerald-100 flex justify-between items-center">
+          <span>{authInfo}</span>
+          <button onClick={() => setAuthInfo("")} className="font-bold">✕</button>
+        </div>
+      )}
+
       <ErrorBanner message={authError} onDismiss={() => setAuthError("")} />
-      <div className="mt-4 space-y-3">
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {!isLogin && (
+          <FormField label="Ваше имя">
+            <Input
+              required
+              placeholder="Иван Иванов"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </FormField>
+        )}
         <FormField label="Email">
           <Input
+            required
             type="email"
-            autoComplete="email"
+            placeholder="example@mail.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </FormField>
         <FormField label="Пароль">
           <Input
+            required
             type="password"
-            autoComplete="current-password"
+            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
         </FormField>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <ActionButton
-          onClick={async () => {
-            setAuthSubmitting(true);
-            try {
-              const ok = await onSignIn(email.trim(), password);
-              if (ok) setPassword("");
-            } finally {
-              setAuthSubmitting(false);
-            }
-          }}
-          disabled={authSubmitting}
-        >
-          {authSubmitting ? "Загрузка..." : "Войти"}
+        
+        <ActionButton type="submit" className="w-full py-2.5 mt-2" disabled={authSubmitting}>
+          {authSubmitting ? "Обработка..." : isLogin ? "Войти" : "Зарегистрироваться"}
         </ActionButton>
-        <ActionButton
-          variant="outline"
-          onClick={async () => {
-            setAuthSubmitting(true);
-            try {
-              const ok = await onSignUp(email.trim(), password);
-              if (ok) setPassword("");
-            } finally {
-              setAuthSubmitting(false);
-            }
+      </form>
+
+      <div className="mt-6 pt-6 border-t border-slate-100 text-center">
+        <button 
+          onClick={() => {
+            setIsLogin(!isLogin);
+            setAuthError("");
           }}
-          disabled={authSubmitting}
+          className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
         >
-          Создать аккаунт
-        </ActionButton>
+          {isLogin ? "Нет аккаунта? Создать" : "Уже есть аккаунт? Войти"}
+        </button>
       </div>
     </div>
   );
@@ -176,6 +212,7 @@ export default function App() {
   const {
     isSupabaseConfigured,
     user,
+    isAdmin,
     authLoading,
     authError,
     setAuthError,
@@ -187,6 +224,7 @@ export default function App() {
     setDataError,
     profile,
     setProfile,
+    allProfiles,
     nutrition,
     workouts,
     weightLogs,
@@ -210,6 +248,8 @@ export default function App() {
     deleteGoal,
     refreshAll
   } = useTrackerData();
+
+  const navPages = isAdmin ? adminPages : pages;
 
   const validate = (field, value, group) => {
     const key = group ? `${group}.${field}` : field;
@@ -243,12 +283,6 @@ export default function App() {
     const ok = await addFood(newFood.name, newFood.calories, newFood.mealType, newFood.weightG);
     if (ok) {
       setNewFood({ name: "", calories: "", mealType: "Перекус", weightG: "" });
-      setErrors(prev => {
-        const next = { ...prev };
-        delete next["food.name"];
-        delete next["food.calories"];
-        return next;
-      });
     }
   };
 
@@ -259,25 +293,13 @@ export default function App() {
     const ok = await addWorkout(newWorkout.type, newWorkout.duration, newWorkout.completed, newWorkout.caloriesBurned, newWorkout.notes);
     if (ok) {
       setNewWorkout({ type: "Бег", duration: "", completed: true, caloriesBurned: "", notes: "" });
-      setErrors(prev => {
-        const next = { ...prev };
-        delete next["workout.duration"];
-        return next;
-      });
     }
   };
 
   const handleAddWeight = async () => {
     if (!validate("weight", newWeight, "weight")) return;
     const ok = await addWeightLog(newWeight);
-    if (ok) {
-      setNewWeight("");
-      setErrors(prev => {
-        const next = { ...prev };
-        delete next["weight.weight"];
-        return next;
-      });
-    }
+    if (ok) setNewWeight("");
   };
 
   const handleAddGoal = async () => {
@@ -288,12 +310,6 @@ export default function App() {
     const ok = await addGoal(newGoal.title, newGoal.target, newGoal.unit);
     if (ok) {
       setNewGoal({ title: "", target: "", unit: "мл" });
-      setErrors(prev => {
-        const next = { ...prev };
-        delete next["goal.title"];
-        delete next["goal.target"];
-        return next;
-      });
     }
   };
 
@@ -301,9 +317,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-100 px-4 py-8">
         <main className="mx-auto max-w-4xl">
-          <ErrorBanner
-            message="Не заданы VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY во frontend/.env."
-          />
+          <ErrorBanner message="Настройте .env: VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY." />
         </main>
       </div>
     );
@@ -311,18 +325,23 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-2 bg-slate-100 px-4 text-center text-slate-600">
-        <p className="font-medium text-slate-800">Загрузка…</p>
-        <p className="max-w-sm text-sm">Проверяем вход. Если экран не меняется долго — проверьте интернет и настройки в файле .env.</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent mx-auto mb-4" />
+          <p className="text-slate-600 font-medium">Загрузка...</p>
+        </div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-100 px-4 py-8">
+      <div className="min-h-screen bg-slate-100 px-4 py-16">
         <main className="mx-auto max-w-4xl">
-          <h1 className="mb-6 text-2xl font-bold text-slate-900">Трекер привычек / целей</h1>
+          <div className="text-center mb-10">
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">LIFE TRACKER</h1>
+            <p className="text-slate-500 mt-2 font-medium">Ваше здоровье в одной системе</p>
+          </div>
           <AuthScreen
             authError={authError}
             setAuthError={setAuthError}
@@ -336,35 +355,31 @@ export default function App() {
     );
   }
 
-  const devAutoLogin = import.meta.env.DEV && import.meta.env.VITE_DEV_AUTO_LOGIN === "true";
-
   return (
     <div className="min-h-screen bg-slate-100">
-      {devAutoLogin && (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm text-amber-950">
-          Локальная разработка: автовход активен.
-        </div>
-      )}
-      <main className="mx-auto max-w-4xl px-4 py-8">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-6">
           <div className="flex items-center gap-4">
-            {profile.avatarUrl && (
-              <img src={profile.avatarUrl} alt="Avatar" className="h-12 w-12 rounded-full object-cover ring-2 ring-emerald-500" />
-            )}
+            <div className="h-12 w-12 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-emerald-200">
+              {profile.displayName ? profile.displayName[0].toUpperCase() : "U"}
+            </div>
             <div>
-              <h1 className="text-2xl font-bold leading-tight text-slate-900">Трекер привычек / целей</h1>
-              {profile.displayName && <p className="text-sm text-slate-600 font-medium">Привет, {profile.displayName}!</p>}
+              <h1 className="text-xl font-black text-slate-900 leading-none">LIFE TRACKER</h1>
+              <p className="text-sm text-slate-500 mt-1 font-medium">
+                {profile.displayName ? `Привет, ${profile.displayName}!` : "Добро пожаловать!"}
+                {isAdmin && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase">Admin</span>}
+              </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <nav className="flex gap-2">
-              {pages.map((p) => (
+          <div className="flex flex-wrap items-center gap-3">
+            <nav className="flex bg-white p-1 rounded-xl shadow-sm ring-1 ring-slate-200">
+              {navPages.map((p) => (
                 <NavButton key={p.key} active={activePage === p.key} onClick={() => setActivePage(p.key)}>
                   {p.label}
                 </NavButton>
               ))}
             </nav>
-            <ActionButton variant="outline" onClick={() => signOut()}>Выйти</ActionButton>
+            <ActionButton variant="outline" onClick={signOut} className="hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200">Выйти</ActionButton>
           </div>
         </header>
 
@@ -375,41 +390,37 @@ export default function App() {
         />
 
         {(isRefreshing || isMutating) && (
-          <p className="mb-4 text-sm font-medium text-slate-500" aria-live="polite">
-            {isMutating && !isRefreshing ? "Сохранение…" : "Загрузка данных…"}
-          </p>
+          <div className="mb-6 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+            <div className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+            {isMutating && !isRefreshing ? "Сохранение данных..." : "Синхронизация..."}
+          </div>
         )}
 
         {/* ПРОФИЛЬ */}
         {activePage === "profile" && (
           <SectionCard
-            title="Ваши параметры"
+            title="Параметры здоровья"
             actions={
               <ActionButton onClick={handleProfileAction} disabled={isMutating}>
-                {profile.isEditing ? "Сохранить" : "Изменить"}
+                {profile.isEditing ? "Сохранить профиль" : "Изменить параметры"}
               </ActionButton>
             }
           >
-            {dataError && !isRefreshing ? (
-              <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                Не удалось загрузить профиль: {dataError}
-              </p>
-            ) : null}
             {profile.isEditing ? (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <FormField label="Имя" error={errors["profile.displayName"]}>
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                <FormField label="Отображаемое имя" error={errors["profile.displayName"]}>
                   <Input
                     value={profile.displayName}
                     error={errors["profile.displayName"]}
                     onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
-                    placeholder="Как к вам обращаться?"
+                    placeholder="Александр"
                   />
                 </FormField>
                 <FormField label="Пол">
                   <Select
                     value={profile.gender}
                     onChange={(e) => setProfile({ ...profile, gender: e.target.value })}
-                    options={[{ label: "Мужской", value: "Мужской" }, { label: "Женский", value: "Женский" }]}
+                    options={[{ label: "Мужской", value: "male" }, { label: "Женский", value: "female" }, { label: "Другое", value: "other" }]}
                   />
                 </FormField>
                 <FormField label="Рост (см)">
@@ -421,18 +432,13 @@ export default function App() {
                 <FormField label="Возраст">
                   <Input type="number" value={profile.age} onChange={(e) => setProfile({ ...profile, age: e.target.value })} />
                 </FormField>
-                <FormField label="Цель калорий">
-                  <Input type="number" value={profile.dailyCalorieGoal} onChange={(e) => setProfile({ ...profile, dailyCalorieGoal: e.target.value })} />
-                </FormField>
               </div>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <StatCard title="Имя" value={profile.displayName || "Не указано"} hint="Профиль" />
-                <StatCard title="Пол" value={profile.gender} hint="Профиль" />
-                <StatCard title="Рост" value={`${profile.height || "—"} см`} hint="Профиль" />
-                <StatCard title="Вес" value={`${profile.weight || "—"} кг`} hint="Профиль" />
-                <StatCard title="Возраст" value={`${profile.age || "—"} лет`} hint="Профиль" />
-                <StatCard title="Цель ккал" value={`${calorieGoal} ккал`} hint="Для прогресса" />
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <StatCard title="Ваш рост" value={`${profile.height || "—"} см`} hint="Для расчета ИМТ" />
+                <StatCard title="Текущий вес" value={`${profile.weight || "—"} кг`} hint="Обновляется из истории" />
+                <StatCard title="Ваш возраст" value={`${profile.age || "—"} лет`} hint="Для обмена веществ" />
+                <StatCard title="Пол" value={profile.gender} hint="Физиология" />
               </div>
             )}
           </SectionCard>
@@ -441,67 +447,83 @@ export default function App() {
         {/* ПИТАНИЕ */}
         {activePage === "nutrition" && (
           <div className="space-y-6">
-            <SectionCard title="Добавить еду">
+            <SectionCard 
+              title="Добавить продукт"
+              actions={
+                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                  <span className="text-xs font-bold text-slate-400 uppercase">Цель:</span>
+                  <input 
+                    type="number" 
+                    value={profile.dailyCalorieGoal} 
+                    onChange={(e) => setProfile({ ...profile, dailyCalorieGoal: e.target.value })}
+                    onBlur={saveProfile}
+                    className="w-16 bg-transparent border-none p-0 text-sm font-black text-emerald-600 focus:ring-0"
+                  />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">ккал</span>
+                </div>
+              }
+            >
               <div className="flex flex-wrap items-end gap-4">
-                <div className="min-w-[160px] flex-1">
-                  <FormField label="Продукт" error={errors["food.name"]}>
-                    <Input value={newFood.name} error={errors["food.name"]} onChange={(e) => setNewFood({ ...newFood, name: e.target.value })} placeholder="Напр: Яблоко" />
+                <div className="min-w-[200px] flex-1">
+                  <FormField label="Название продукта" error={errors["food.name"]}>
+                    <Input value={newFood.name} error={errors["food.name"]} onChange={(e) => setNewFood({ ...newFood, name: e.target.value })} placeholder="Напр: Куриная грудка" />
                   </FormField>
                 </div>
-                <div className="w-32">
-                  <FormField label="Тип">
+                <div className="w-40">
+                  <FormField label="Прием пищи">
                     <Select value={newFood.mealType} onChange={(e) => setNewFood({ ...newFood, mealType: e.target.value })} options={mealTypes} />
                   </FormField>
                 </div>
-                <div className="w-20">
+                <div className="w-24">
                   <FormField label="Ккал" error={errors["food.calories"]}>
                     <Input type="number" value={newFood.calories} error={errors["food.calories"]} onChange={(e) => setNewFood({ ...newFood, calories: e.target.value })} />
                   </FormField>
                 </div>
-                <div className="w-20">
-                  <FormField label="Вес (г)">
+                <div className="w-24">
+                  <FormField label="Грамм">
                     <Input type="number" value={newFood.weightG} onChange={(e) => setNewFood({ ...newFood, weightG: e.target.value })} />
                   </FormField>
                 </div>
-                <ActionButton onClick={handleAddFood} disabled={isMutating}>Добавить</ActionButton>
+                <ActionButton onClick={handleAddFood} disabled={isMutating} className="px-6 h-10">Добавить</ActionButton>
               </div>
             </SectionCard>
-            <SectionCard title="Записи за сегодня">
-              <div className="space-y-2">
-                {isRefreshing && nutrition.length === 0 ? (
-                  <p className="text-sm text-slate-500">Загрузка...</p>
-                ) : nutrition.length === 0 ? (
-                  <EmptyState message="Вы еще не добавили ни одного продукта сегодня" icon="🍎" />
+            <SectionCard title="Сегодняшний рацион">
+              <div className="space-y-1">
+                {nutrition.length === 0 ? (
+                  <EmptyState message="Вы еще ничего не съели сегодня" icon="🍴" />
                 ) : (
                   nutrition.map((f) => (
-                    <div key={f.id} className="border-b border-slate-100 py-3">
+                    <div key={f.id} className="group border-b border-slate-50 py-4 last:border-0 hover:bg-slate-50/50 transition rounded-lg px-2">
                       {editingFoodId === f.id ? (
                         <div className="flex flex-wrap items-end gap-3">
                           <Input className="flex-1" value={foodDraft.name} onChange={(e) => setFoodDraft({ ...foodDraft, name: e.target.value })} />
                           <Select className="w-32" value={foodDraft.mealType} onChange={(e) => setFoodDraft({ ...foodDraft, mealType: e.target.value })} options={mealTypes} />
                           <Input className="w-20" type="number" value={foodDraft.calories} onChange={(e) => setFoodDraft({ ...foodDraft, calories: e.target.value })} />
-                          <Input className="w-20" type="number" placeholder="г" value={foodDraft.weightG} onChange={(e) => setFoodDraft({ ...foodDraft, weightG: e.target.value })} />
                           <div className="flex gap-2">
                             <ActionButton onClick={async () => {
                               const ok = await updateFood(f.id, foodDraft.name, foodDraft.calories, foodDraft.mealType, foodDraft.weightG);
                               if (ok) setEditingFoodId(null);
-                            }}>ОК</ActionButton>
+                            }}>Сохранить</ActionButton>
                             <ActionButton variant="outline" onClick={() => setEditingFoodId(null)}>Отмена</ActionButton>
                           </div>
                         </div>
                       ) : (
                         <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded mr-2">{f.meal_type}</span>
-                            <span className="font-medium text-slate-900">{f.name}</span>
-                            <span className="ml-2 text-slate-600">{f.calories} ккал {f.weight_g ? `(${f.weight_g}г)` : ""}</span>
+                          <div className="flex items-center gap-4">
+                            <div className="text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
+                              {f.meal_type}
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900">{f.name}</p>
+                              <p className="text-xs text-slate-500 font-medium">{f.calories} ккал {f.weight_g ? `• ${f.weight_g}г` : ""}</p>
+                            </div>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
                             <ActionButton variant="outline" onClick={() => {
                               setEditingFoodId(f.id);
                               setFoodDraft({ name: f.name, calories: f.calories, mealType: f.meal_type, weightG: f.weight_g || "" });
-                            }}>Правка</ActionButton>
-                            <ActionButton variant="danger" onClick={() => window.confirm("Удалить?") && deleteFood(f.id)}>Удалить</ActionButton>
+                            }}>Изм.</ActionButton>
+                            <ActionButton variant="danger" onClick={() => window.confirm("Удалить запись?") && deleteFood(f.id)}>Уд.</ActionButton>
                           </div>
                         </div>
                       )}
@@ -518,53 +540,47 @@ export default function App() {
           <div className="space-y-6">
             <SectionCard title="Новая тренировка">
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 items-end">
-                <FormField label="Тип">
+                <FormField label="Вид спорта">
                   <Select value={newWorkout.type} onChange={(e) => setNewWorkout({ ...newWorkout, type: e.target.value })} options={workoutTypes} />
                 </FormField>
-                <FormField label="Мин." error={errors["workout.duration"]}>
+                <FormField label="Длительность (мин)" error={errors["workout.duration"]}>
                   <Input type="number" value={newWorkout.duration} error={errors["workout.duration"]} onChange={(e) => setNewWorkout({ ...newWorkout, duration: e.target.value })} />
                 </FormField>
-                <FormField label="Сж. ккал">
+                <FormField label="Расход ккал">
                   <Input type="number" value={newWorkout.caloriesBurned} onChange={(e) => setNewWorkout({ ...newWorkout, caloriesBurned: e.target.value })} />
                 </FormField>
                 <div className="flex items-center gap-4">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                    <input type="checkbox" checked={newWorkout.completed} onChange={(e) => setNewWorkout({ ...newWorkout, completed: e.target.checked })} />
-                    Готово
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 font-medium">
+                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" checked={newWorkout.completed} onChange={(e) => setNewWorkout({ ...newWorkout, completed: e.target.checked })} />
+                    Выполнено
                   </label>
-                  <ActionButton onClick={handleAddWorkout} disabled={isMutating}>Добавить</ActionButton>
+                  <ActionButton onClick={handleAddWorkout} disabled={isMutating} className="flex-1">Добавить</ActionButton>
                 </div>
                 <div className="sm:col-span-2 lg:col-span-4">
-                  <FormField label="Заметки">
-                    <Input value={newWorkout.notes} onChange={(e) => setNewWorkout({ ...newWorkout, notes: e.target.value })} placeholder="Напр: Легкий бег в парке" />
+                  <FormField label="Комментарий">
+                    <Input value={newWorkout.notes} onChange={(e) => setNewWorkout({ ...newWorkout, notes: e.target.value })} placeholder="Напр: Сделал 3 подхода по 15" />
                   </FormField>
                 </div>
               </div>
             </SectionCard>
-            <SectionCard title="Тренировки за сегодня">
+            <SectionCard title="Сегодняшняя активность">
               <div className="space-y-2">
-                {isRefreshing && workouts.length === 0 ? (
-                  <p className="text-sm text-slate-500">Загрузка...</p>
-                ) : workouts.length === 0 ? (
-                  <EmptyState message="Тренировок пока нет" icon="👟" />
+                {workouts.length === 0 ? (
+                  <EmptyState message="Тренировок еще не было" icon="👟" />
                 ) : (
                   workouts.map((w) => (
-                    <div key={w.id} className="border-b border-slate-100 py-3">
+                    <div key={w.id} className="group border-b border-slate-50 py-4 last:border-0 hover:bg-slate-50/50 transition rounded-lg px-2">
                       {editingWorkoutId === w.id ? (
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-wrap items-end gap-3">
                             <Select className="w-40" value={workoutDraft.type} onChange={(e) => setWorkoutDraft({ ...workoutDraft, type: e.target.value })} options={workoutTypes} />
                             <Input className="w-20" type="number" value={workoutDraft.duration} onChange={(e) => setWorkoutDraft({ ...workoutDraft, duration: e.target.value })} />
                             <Input className="w-20" type="number" value={workoutDraft.caloriesBurned} onChange={(e) => setWorkoutDraft({ ...workoutDraft, caloriesBurned: e.target.value })} />
-                            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
-                              <input type="checkbox" checked={workoutDraft.completed} onChange={(e) => setWorkoutDraft({ ...workoutDraft, completed: e.target.checked })} />
-                              Готово
-                            </label>
                             <div className="flex gap-2">
                               <ActionButton onClick={async () => {
                                 const ok = await updateWorkout(w.id, { ...workoutDraft, durationMin: workoutDraft.duration });
                                 if (ok) setEditingWorkoutId(null);
-                              }}>ОК</ActionButton>
+                              }}>OK</ActionButton>
                               <ActionButton variant="outline" onClick={() => setEditingWorkoutId(null)}>Отмена</ActionButton>
                             </div>
                           </div>
@@ -573,20 +589,24 @@ export default function App() {
                       ) : (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span className={`h-2 w-2 rounded-full ${w.completed ? "bg-emerald-500" : "bg-slate-300"}`} />
-                              <span className="font-medium">{w.type}</span>
-                              <span className="text-sm text-slate-500">{w.duration} мин {w.calories_burned ? `(-${w.calories_burned} ккал)` : ""}</span>
+                            <div className="flex items-center gap-4">
+                              <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-lg ${w.completed ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>
+                                {w.completed ? "✓" : "○"}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-900">{w.type}</p>
+                                <p className="text-xs text-slate-500 font-medium">{w.duration} мин • {w.calories_burned} ккал</p>
+                              </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
                               <ActionButton variant="outline" onClick={() => {
                                 setEditingWorkoutId(w.id);
                                 setWorkoutDraft({ type: w.type, duration: w.duration, completed: w.completed, caloriesBurned: w.calories_burned || "", notes: w.notes || "" });
-                              }}>Правка</ActionButton>
-                              <ActionButton variant="danger" onClick={() => window.confirm("Удалить?") && deleteWorkout(w.id)}>Удалить</ActionButton>
+                              }}>Изм.</ActionButton>
+                              <ActionButton variant="danger" onClick={() => window.confirm("Удалить запись?") && deleteWorkout(w.id)}>Уд.</ActionButton>
                             </div>
                           </div>
-                          {w.notes && <p className="text-xs text-slate-400 italic pl-5">{w.notes}</p>}
+                          {w.notes && <p className="text-xs text-slate-400 italic pl-14">{w.notes}</p>}
                         </div>
                       )}
                     </div>
@@ -601,22 +621,22 @@ export default function App() {
         {activePage === "progress" && (
           <div className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2">
-              <SectionCard title="Баланс калорий за сегодня">
+              <SectionCard title="Баланс калорий сегодня">
                 <div className="flex flex-col gap-6">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100">
-                      <p className="text-xs font-bold uppercase tracking-wider text-emerald-700 mb-1">Получено</p>
-                      <p className="text-2xl font-black text-emerald-900">{totals.caloriesToday} <span className="text-sm font-normal">ккал</span></p>
+                    <div className="rounded-2xl bg-white border border-slate-100 p-5 shadow-sm">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-2">Получено</p>
+                      <p className="text-3xl font-black text-slate-900">{totals.caloriesToday} <span className="text-sm font-bold text-slate-400 uppercase">ккал</span></p>
                     </div>
-                    <div className="rounded-xl bg-rose-50 p-4 border border-rose-100">
-                      <p className="text-xs font-bold uppercase tracking-wider text-rose-700 mb-1">Сожжено</p>
-                      <p className="text-2xl font-black text-rose-900">{totals.caloriesBurnedToday} <span className="text-sm font-normal">ккал</span></p>
+                    <div className="rounded-2xl bg-white border border-slate-100 p-5 shadow-sm">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-rose-600 mb-2">Сожжено</p>
+                      <p className="text-3xl font-black text-slate-900">{totals.caloriesBurnedToday} <span className="text-sm font-bold text-slate-400 uppercase">ккал</span></p>
                     </div>
                   </div>
-                  <ProgressBar label="Прогресс цели" value={totals.caloriesToday} max={calorieGoal} unit="ккал" />
-                  <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-500">Остаток на день:</span>
-                    <span className={`text-lg font-bold ${calorieGoal - totals.caloriesToday + totals.caloriesBurnedToday > 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                  <ProgressBar label="Выполнение дневной нормы" value={totals.caloriesToday} max={calorieGoal} unit="ккал" />
+                  <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
+                    <span className="text-sm font-bold text-slate-400 uppercase tracking-tight">Осталось:</span>
+                    <span className={`text-xl font-black ${calorieGoal - totals.caloriesToday + totals.caloriesBurnedToday > 0 ? "text-emerald-500" : "text-rose-500"}`}>
                       {calorieGoal - totals.caloriesToday + totals.caloriesBurnedToday} ккал
                     </span>
                   </div>
@@ -624,25 +644,25 @@ export default function App() {
               </SectionCard>
 
               <SectionCard title="История веса">
-                <div className="flex gap-2 mb-4">
+                <div className="flex gap-2 mb-6">
                   <Input 
                     type="number" 
-                    placeholder="Вес (кг)" 
+                    placeholder="Ваш вес в кг" 
                     value={newWeight} 
                     error={errors["weight.weight"]}
                     onChange={(e) => setNewWeight(e.target.value)} 
                   />
-                  <ActionButton onClick={handleAddWeight}>Записать</ActionButton>
+                  <ActionButton onClick={handleAddWeight} className="px-6">Записать</ActionButton>
                 </div>
-                <div className="space-y-2 max-h-[240px] overflow-auto pr-1">
+                <div className="space-y-2 max-h-[260px] overflow-auto pr-1">
                   {weightLogs.length === 0 ? (
-                    <p className="text-sm text-slate-400 text-center py-4">История пуста</p>
+                    <p className="text-sm text-slate-400 text-center py-10 border border-dashed border-slate-100 rounded-xl">История взвешиваний пуста</p>
                   ) : weightLogs.map(l => (
-                    <div key={l.id} className="flex justify-between items-center bg-slate-50 rounded-lg px-4 py-2 border-l-4 border-emerald-500">
-                      <span className="text-xs font-medium text-slate-500">{new Date(l.logged_at).toLocaleDateString()}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="font-bold text-slate-900">{l.weight_kg} кг</span>
-                        <button className="text-slate-300 hover:text-rose-500 transition" onClick={() => deleteWeightLog(l.id)}>✕</button>
+                    <div key={l.id} className="flex justify-between items-center bg-white border border-slate-50 rounded-xl px-5 py-3 shadow-sm">
+                      <span className="text-xs font-bold text-slate-400">{new Date(l.logged_at).toLocaleDateString()}</span>
+                      <div className="flex items-center gap-4">
+                        <span className="font-black text-slate-900">{l.weight_kg} кг</span>
+                        <button className="text-slate-300 hover:text-rose-500 transition text-lg" onClick={() => deleteWeightLog(l.id)}>✕</button>
                       </div>
                     </div>
                   ))}
@@ -650,49 +670,86 @@ export default function App() {
               </SectionCard>
             </div>
 
-            <SectionCard title="Мои цели">
-              <div className="grid gap-6 lg:grid-cols-3">
-                <div className="lg:col-span-1 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <h3 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-tight">Новая цель</h3>
-                  <div className="space-y-3">
-                    <FormField label="Название" error={errors["goal.title"]}>
-                      <Input placeholder="Напр: Вода" value={newGoal.title} error={errors["goal.title"]} onChange={(e) => setNewGoal({ ...newGoal, title: e.target.value })} />
+            <SectionCard title="Личные цели">
+              <div className="grid gap-8 lg:grid-cols-3">
+                <div className="lg:col-span-1 bg-slate-50/50 p-6 rounded-2xl border border-slate-100 shadow-inner">
+                  <h3 className="text-xs font-black text-slate-400 mb-5 uppercase tracking-widest">Новая цель</h3>
+                  <div className="space-y-4">
+                    <FormField label="Что трекаем?" error={errors["goal.title"]}>
+                      <Input placeholder="Напр: Пить воду" value={newGoal.title} error={errors["goal.title"]} onChange={(e) => setNewGoal({ ...newGoal, title: e.target.value })} />
                     </FormField>
-                    <div className="grid grid-cols-2 gap-2">
-                      <FormField label="Цель" error={errors["goal.target"]}>
-                        <Input type="number" placeholder="0" value={newGoal.target} error={errors["goal.target"]} onChange={(e) => setNewGoal({ ...newGoal, target: e.target.value })} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField label="Сколько?" error={errors["goal.target"]}>
+                        <Input type="number" placeholder="2000" value={newGoal.target} error={errors["goal.target"]} onChange={(e) => setNewGoal({ ...newGoal, target: e.target.value })} />
                       </FormField>
                       <FormField label="Ед. изм.">
                         <Select value={newGoal.unit} onChange={(e) => setNewGoal({ ...newGoal, unit: e.target.value })} options={goalUnits} />
                       </FormField>
                     </div>
-                    <ActionButton onClick={handleAddGoal} className="w-full py-2">Добавить цель</ActionButton>
+                    <ActionButton onClick={handleAddGoal} className="w-full py-3 shadow-md shadow-emerald-100">Создать цель</ActionButton>
                   </div>
                 </div>
                 
-                <div className="lg:col-span-2 grid gap-3 sm:grid-cols-2 auto-rows-min">
+                <div className="lg:col-span-2 grid gap-4 sm:grid-cols-2 auto-rows-min">
                   {goals.length === 0 ? (
-                    <div className="sm:col-span-2 flex items-center justify-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
-                      <p className="text-sm text-slate-400">У вас пока нет активных целей</p>
+                    <div className="sm:col-span-2 flex items-center justify-center py-16 border-2 border-dashed border-slate-200 rounded-3xl">
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Цели отсутствуют</p>
                     </div>
                   ) : goals.map(g => (
-                    <div key={g.id} className="rounded-xl border border-slate-100 p-4 bg-white shadow-sm hover:shadow-md transition">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-bold text-slate-800 leading-tight">{g.title}</h4>
-                        <button className="text-slate-300 hover:text-rose-500" onClick={() => deleteGoal(g.id)}>✕</button>
+                    <div key={g.id} className="rounded-2xl border border-slate-50 p-5 bg-white shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-start mb-4">
+                        <h4 className="font-black text-slate-900 text-lg leading-tight uppercase tracking-tight">{g.title}</h4>
+                        <button className="text-slate-300 hover:text-rose-500 transition" onClick={() => deleteGoal(g.id)}>✕</button>
                       </div>
-                      <p className="text-xs text-slate-500 mb-3">{g.current_value} / {g.target_value} {g.unit}</p>
-                      <div className="flex gap-2 items-center">
-                        <input type="range" className="flex-1 h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600" 
+                      <div className="flex justify-between items-end mb-2">
+                        <span className="text-xs font-bold text-slate-400 uppercase">{g.unit}</span>
+                        <span className="text-sm font-black text-slate-900">{g.current_value} / {g.target_value}</span>
+                      </div>
+                      <div className="flex gap-4 items-center">
+                        <input type="range" className="flex-1 h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-500" 
                           min="0" max={g.target_value} value={g.current_value} 
                           onChange={(e) => updateGoal(g.id, { ...g, targetValue: g.target_value, currentValue: e.target.value })} />
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">
                           {Math.round((g.current_value / g.target_value) * 100)}%
                         </span>
                       </div>
                     </div>
                   ))}
                 </div>
+              </div>
+            </SectionCard>
+          </div>
+        )}
+
+        {/* АДМИН-ПАНЕЛЬ */}
+        {activePage === "admin" && isAdmin && (
+          <div className="space-y-6">
+            <SectionCard title="Все пользователи (Админ)">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs font-black uppercase text-slate-400 border-b border-slate-100">
+                    <tr>
+                      <th className="px-4 py-3">Имя</th>
+                      <th className="px-4 py-3">Роль</th>
+                      <th className="px-4 py-3">ID</th>
+                      <th className="px-4 py-3">Обновлен</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {allProfiles.map(p => (
+                      <tr key={p.id} className="hover:bg-slate-50/50 transition">
+                        <td className="px-4 py-3 font-bold text-slate-900">{p.display_name || "Без имени"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${p.role === "admin" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"}`}>
+                            {p.role}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-[10px] font-mono text-slate-400">{p.id}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{new Date(p.updated_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </SectionCard>
           </div>

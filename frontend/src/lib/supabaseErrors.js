@@ -62,16 +62,23 @@ export function humanizeDataError(error) {
   if (isNetworkLikeError(error)) {
     return translateAuthError(error);
   }
-  if (lower.includes("jwt expired") || lower.includes("invalid jwt")) {
-    return "Сессия устарела — нажмите «Выйти» и войдите снова.";
+  
+  // 401 Unauthorized
+  if (lower.includes("jwt expired") || lower.includes("invalid jwt") || code === "401" || raw.includes("401")) {
+    return "Ошибка авторизации (401): Сессия устарела. Пожалуйста, войдите снова.";
   }
+
+  // 403 Forbidden
   if (
     lower.includes("permission denied") ||
     lower.includes("row-level security") ||
-    code === "42501"
+    code === "42501" ||
+    code === "403" ||
+    raw.includes("403")
   ) {
-    return "Нет прав на данные. Убедитесь, что вы вошли в аккаунт и в Supabase настроен RLS.";
+    return "Нет прав (403): У вас недостаточно прав для этого действия или доступа к этим данным.";
   }
+
   if (lower.includes("relation") && lower.includes("does not exist")) {
     return "Таблицы в базе не найдены — выполните SQL из README в Supabase.";
   }

@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { humanizeDataError, translateAuthError } from "../lib/supabaseErrors";
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient";
+import { 
+  registerSchema, 
+  loginSchema, 
+  profileUpdateSchema, 
+  nutritionSchema, 
+  workoutSchema, 
+  weightLogSchema, 
+  goalSchema,
+  idSchema,
+  formatZodError 
+} from "../lib/validation";
 
-/** Границы «сегодня» в локальной таймзоне для фильтра logged_at. */
 function getTodayRangeIso() {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -11,42 +21,38 @@ function getTodayRangeIso() {
   return { startIso: start.toISOString(), endIso: end.toISOString() };
 }
 
-/**
- * Сессия, профиль, дневники и запросы к Supabase.
- * RLS в БД требует вошедшего пользователя (authenticated).
- */
 export function useTrackerData() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
-  /** Информация после регистрации (например, подтвердите email) — не ошибка */
   const [authInfo, setAuthInfo] = useState("");
 
-  /** Первая загрузка / обновление списков — не блокирует кнопки «Сохранить» / «Добавить» */
   const [isRefreshing, setIsRefreshing] = useState(false);
-  /** Сохранение профиля или добавление записи */
   const [isMutating, setIsMutating] = useState(false);
   const [dataError, setDataError] = useState("");
 
   const [profile, setProfile] = useState({
     displayName: "",
     avatarUrl: "",
-    gender: "Мужской",
+    role: "user",
+    gender: "male",
     height: "",
     weight: "",
     age: "",
     dailyCalorieGoal: 2000,
-    isEditing: true
+    isEditing: false
   });
 
   const [nutrition, setNutrition] = useState([]);
   const [workouts, setWorkouts] = useState([]);
   const [weightLogs, setWeightLogs] = useState([]);
   const [goals, setGoals] = useState([]);
+  const [allProfiles, setAllProfiles] = useState([]);
 
   const user = session?.user ?? null;
+  const isAdmin = profile.role === "admin";
 
-  // Подписка на сессию Auth + опциональный автовход только в dev (см. .env.example)
+  // Auth State
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       setAuthLoading(false);
@@ -54,10 +60,7 @@ export function useTrackerData() {
     }
 
     let cancelled = false;
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       if (!cancelled) setSession(s ?? null);
     });
 
@@ -66,36 +69,15 @@ export function useTrackerData() {
         const { data: { session: initial }, error } = await supabase.auth.getSession();
         if (cancelled) return;
         if (error) setAuthError(translateAuthError(error));
-
         let s = initial ?? null;
-
-        // Локальная разработка: без ручного входа (нужен реальный пользователь из-за RLS)
-        if (
-          !s &&
-          import.meta.env.DEV &&
-          import.meta.env.VITE_DEV_AUTO_LOGIN === "true"
-        ) {
-          const devEmail = (import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL ?? "").trim();
-          const devPassword = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD ?? "";
-          if (devEmail && devPassword) {
-            const { data: signData, error: signErr } =
-              await supabase.auth.signInWithPassword({
-                email: devEmail,
-                password: devPassword
-              });
-            if (cancelled) return;
-            if (signErr) {
-              setAuthError(`Автовход: ${translateAuthError(signErr)}`);
-            } else {
-              s = signData.session ?? null;
-            }
-          } else {
-            setAuthError(
-              "В .env задайте VITE_DEV_AUTO_LOGIN_EMAIL и VITE_DEV_AUTO_LOGIN_PASSWORD."
-            );
+        if (!s && import.meta.env.DEV && import.meta.env.VITE_DEV_AUTO_LOGIN === "true") {
+          const email = import.meta.env.VITE_DEV_AUTO_LOGIN_EMAIL?.trim();
+          const pass = import.meta.env.VITE_DEV_AUTO_LOGIN_PASSWORD;
+          if (email && pass) {
+            const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password: pass });
+            if (!cancelled && !signErr) s = data.session;
           }
         }
-
         if (!cancelled) setSession(s);
       } catch (e) {
         if (!cancelled) {
@@ -113,36 +95,18 @@ export function useTrackerData() {
     };
   }, []);
 
+  // Data Loading
   const loadProfile = useCallback(async (uid) => {
     if (!supabase) return;
     const { data, error } = await supabase
       .from("profiles")
-      .select("display_name,avatar_url,gender,height_cm,weight_kg,age,daily_calorie_goal")
+      .select("display_name,avatar_url,role,gender,height_cm,weight_kg,age,daily_calorie_goal")
       .eq("id", uid)
       .maybeSingle();
 
     if (error) throw error;
-
     if (!data) {
-      const { error: insErr } = await supabase.from("profiles").insert({ id: uid });
-      if (insErr) throw insErr;
-      const { data: created, error: fetchErr } = await supabase
-        .from("profiles")
-        .select("display_name,avatar_url,gender,height_cm,weight_kg,age,daily_calorie_goal")
-        .eq("id", uid)
-        .maybeSingle();
-      if (fetchErr) throw fetchErr;
-      if (!created) return;
-      setProfile((p) => ({
-        ...p,
-        displayName: created.display_name ?? "",
-        avatarUrl: created.avatar_url ?? "",
-        gender: created.gender ?? "Мужской",
-        height: created.height_cm != null ? String(created.height_cm) : "",
-        weight: created.weight_kg != null ? String(created.weight_kg) : "",
-        age: created.age != null ? String(created.age) : "",
-        dailyCalorieGoal: created.daily_calorie_goal ?? 2000
-      }));
+      setProfile(p => ({ ...p, isEditing: true }));
       return;
     }
 
@@ -150,25 +114,33 @@ export function useTrackerData() {
       ...p,
       displayName: data.display_name ?? "",
       avatarUrl: data.avatar_url ?? "",
-      gender: data.gender ?? "Мужской",
+      role: data.role ?? "user",
+      gender: data.gender ?? "male",
       height: data.height_cm != null ? String(data.height_cm) : "",
       weight: data.weight_kg != null ? String(data.weight_kg) : "",
       age: data.age != null ? String(data.age) : "",
-      dailyCalorieGoal: data.daily_calorie_goal ?? 2000
+      dailyCalorieGoal: data.daily_calorie_goal ?? 2000,
+      isEditing: false
     }));
   }, []);
+
+  const loadAllProfiles = useCallback(async () => {
+    if (!supabase || profile.role !== "admin") return;
+    const { data, error } = await supabase.from("profiles").select("*").order("updated_at", { ascending: false });
+    if (error) throw error;
+    setAllProfiles(data ?? []);
+  }, [profile.role]);
 
   const loadNutritionToday = useCallback(async (uid) => {
     if (!supabase) return;
     const { startIso, endIso } = getTodayRangeIso();
     const { data, error } = await supabase
       .from("nutrition_entries")
-      .select("id,name,calories,meal_type,weight_g,logged_at")
+      .select("*")
       .eq("user_id", uid)
       .gte("logged_at", startIso)
       .lte("logged_at", endIso)
       .order("logged_at", { ascending: false });
-
     if (error) throw error;
     setNutrition(data ?? []);
   }, []);
@@ -178,43 +150,25 @@ export function useTrackerData() {
     const { startIso, endIso } = getTodayRangeIso();
     const { data, error } = await supabase
       .from("workout_entries")
-      .select("id,type,duration_min,calories_burned,completed,notes,logged_at")
+      .select("*")
       .eq("user_id", uid)
       .gte("logged_at", startIso)
       .lte("logged_at", endIso)
       .order("logged_at", { ascending: false });
-
     if (error) throw error;
-    setWorkouts(
-      (data ?? []).map((w) => ({
-        ...w,
-        duration: w.duration_min,
-        caloriesBurned: w.calories_burned
-      }))
-    );
+    setWorkouts((data ?? []).map(w => ({ ...w, duration: w.duration_min, caloriesBurned: w.calories_burned })));
   }, []);
 
   const loadWeightLogs = useCallback(async (uid) => {
     if (!supabase) return;
-    const { data, error } = await supabase
-      .from("weight_logs")
-      .select("id,weight_kg,logged_at")
-      .eq("user_id", uid)
-      .order("logged_at", { ascending: false })
-      .limit(30);
-
+    const { data, error } = await supabase.from("weight_logs").select("*").eq("user_id", uid).order("logged_at", { ascending: false }).limit(30);
     if (error) throw error;
     setWeightLogs(data ?? []);
   }, []);
 
   const loadGoals = useCallback(async (uid) => {
     if (!supabase) return;
-    const { data, error } = await supabase
-      .from("goals")
-      .select("id,title,target_value,current_value,unit,deadline,completed")
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false });
-
+    const { data, error } = await supabase.from("goals").select("*").eq("user_id", uid).order("created_at", { ascending: false });
     if (error) throw error;
     setGoals(data ?? []);
   }, []);
@@ -224,113 +178,79 @@ export function useTrackerData() {
     setDataError("");
     setIsRefreshing(true);
     try {
-      await Promise.all([
-        loadProfile(user.id),
-        loadNutritionToday(user.id),
-        loadWorkoutsToday(user.id),
-        loadWeightLogs(user.id),
-        loadGoals(user.id)
-      ]);
+      const tasks = [loadProfile(user.id), loadNutritionToday(user.id), loadWorkoutsToday(user.id), loadWeightLogs(user.id), loadGoals(user.id)];
+      if (profile.role === "admin") tasks.push(loadAllProfiles());
+      await Promise.all(tasks);
     } catch (e) {
-      setDataError(humanizeDataError(e));
+      const message = humanizeDataError(e);
+      setDataError(message);
+      // Если ошибка 401 (Unauthorized) - разлогиниваем пользователя
+      if (message.includes("401")) {
+        signOut();
+      }
     } finally {
       setIsRefreshing(false);
     }
-  }, [user?.id, loadProfile, loadNutritionToday, loadWorkoutsToday, loadWeightLogs, loadGoals]);
+  }, [user?.id, loadProfile, loadNutritionToday, loadWorkoutsToday, loadWeightLogs, loadGoals, loadAllProfiles, profile.role]);
 
   useEffect(() => {
-    if (!user?.id) {
-      setNutrition([]);
-      setWorkouts([]);
-      setWeightLogs([]);
-      setGoals([]);
-      return;
+    if (user?.id) refreshAll();
+    else {
+      setNutrition([]); setWorkouts([]); setWeightLogs([]); setGoals([]); setAllProfiles([]);
     }
-    refreshAll();
   }, [user?.id, refreshAll]);
 
+  // Actions with Validation
   const signIn = async (email, password) => {
-    if (!supabase) return false;
-    setAuthError("");
-    setAuthInfo("");
-    const trimmed = email.trim();
-    if (!trimmed || !password) {
-      setAuthError("Введите email и пароль.");
+    const val = loginSchema.safeParse({ email, password });
+    if (!val.success) {
+      setAuthError(val.error.errors[0].message);
       return false;
     }
-    const { error } = await supabase.auth.signInWithPassword({
-      email: trimmed,
-      password
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) setAuthError(translateAuthError(error));
     return !error;
   };
 
-  const signUp = async (email, password) => {
-    if (!supabase) return false;
-    setAuthError("");
-    setAuthInfo("");
-    const trimmed = email.trim();
-    if (!trimmed || !password) {
-      setAuthError("Введите email и пароль.");
+  const signUp = async (email, password, name) => {
+    const val = registerSchema.safeParse({ email, password, name });
+    if (!val.success) {
+      setAuthError(val.error.errors[0].message);
       return false;
     }
-    if (password.length < 6) {
-      setAuthError("Пароль не короче 6 символов.");
-      return false;
-    }
-
-    const redirectTo =
-      typeof window !== "undefined" ? `${window.location.origin}/` : undefined;
-
-    const { data, error } = await supabase.auth.signUp({
-      email: trimmed,
-      password,
-      options: redirectTo ? { emailRedirectTo: redirectTo } : undefined
+    const { data, error } = await supabase.auth.signUp({ 
+      email: email.trim(), 
+      password, 
+      options: { data: { display_name: name } } 
     });
-
     if (error) {
       setAuthError(translateAuthError(error));
       return false;
     }
-
-    // Подтверждение email включено: сессии нет, пользователь не «внутри» приложения
-    if (data.user && !data.session) {
-      setAuthInfo("Откройте письмо и подтвердите email, затем нажмите «Войти».");
-      return false;
-    }
-
+    if (data.user && !data.session) setAuthInfo("Подтвердите email и войдите.");
     return Boolean(data.session);
   };
 
-  const signOut = async () => {
-    setAuthError("");
-    setAuthInfo("");
-    if (supabase) await supabase.auth.signOut();
-  };
+  const signOut = async () => { if (supabase) await supabase.auth.signOut(); };
 
   const saveProfile = async () => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+    if (!user?.id) return false;
+    const data = {
+      display_name: profile.displayName,
+      gender: profile.gender,
+      height_cm: profile.height === "" ? null : Number(profile.height),
+      weight_kg: profile.weight === "" ? null : Number(profile.weight),
+      age: profile.age === "" ? null : Number(profile.age),
+      daily_calorie_goal: profile.dailyCalorieGoal ? Number(profile.dailyCalorieGoal) : 2000
+    };
+    const val = profileUpdateSchema.safeParse(data);
+    if (!val.success) {
+      setDataError(val.error.errors[0].message);
+      return false;
+    }
     setIsMutating(true);
     try {
-      const row = {
-        id: user.id,
-        display_name: profile.displayName,
-        avatar_url: profile.avatarUrl,
-        gender: profile.gender,
-        height_cm: profile.height === "" ? null : Number(profile.height),
-        weight_kg: profile.weight === "" ? null : Number(profile.weight),
-        age: profile.age === "" ? null : Number(profile.age),
-        daily_calorie_goal: profile.dailyCalorieGoal
-          ? Number(profile.dailyCalorieGoal)
-          : null
-      };
-
-      const { error } = await supabase.from("profiles").upsert(row, {
-        onConflict: "id"
-      });
-
+      const { error } = await supabase.from("profiles").upsert({ id: user.id, ...data });
       if (error) throw error;
       await loadProfile(user.id);
       return true;
@@ -343,306 +263,165 @@ export function useTrackerData() {
   };
 
   const addFood = async (name, calories, mealType = "Перекус", weightG = null) => {
-    if (!supabase || !user?.id || !name) return false;
-    setDataError("");
+    const data = { name, calories: Number(calories), meal_type: mealType, weight_g: weightG ? Number(weightG) : null };
+    const val = nutritionSchema.safeParse(data);
+    if (!val.success) { setDataError(val.error.errors[0].message); return false; }
     setIsMutating(true);
     try {
-      const { error } = await supabase.from("nutrition_entries").insert({
-        user_id: user.id,
-        name: name.trim(),
-        calories: Number(calories) || 0,
-        meal_type: mealType,
-        weight_g: weightG ? Number(weightG) : null,
-        logged_at: new Date().toISOString()
-      });
+      const { error } = await supabase.from("nutrition_entries").insert({ user_id: user.id, ...data });
       if (error) throw error;
       await loadNutritionToday(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
-  const updateFood = async (entryId, name, calories, mealType, weightG) => {
-    if (!supabase || !user?.id || !name?.trim()) return false;
-    setDataError("");
+  const updateFood = async (id, name, calories, mealType, weightG) => {
+    const data = { name, calories: Number(calories), meal_type: mealType, weight_g: weightG ? Number(weightG) : null };
+    if (!idSchema.safeParse(id).success) return false;
+    const val = nutritionSchema.safeParse(data);
+    if (!val.success) { setDataError(val.error.errors[0].message); return false; }
     setIsMutating(true);
     try {
-      const { error } = await supabase
-        .from("nutrition_entries")
-        .update({
-          name: name.trim(),
-          calories: Number(calories) || 0,
-          meal_type: mealType,
-          weight_g: weightG ? Number(weightG) : null
-        })
-        .eq("id", entryId)
-        .eq("user_id", user.id);
-
+      const { error } = await supabase.from("nutrition_entries").update(data).eq("id", id);
       if (error) throw error;
       await loadNutritionToday(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
-  const deleteFood = async (entryId) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+  const deleteFood = async (id) => {
+    if (!idSchema.safeParse(id).success) return false;
     setIsMutating(true);
     try {
-      const { error } = await supabase
-        .from("nutrition_entries")
-        .delete()
-        .eq("id", entryId)
-        .eq("user_id", user.id);
-
+      const { error } = await supabase.from("nutrition_entries").delete().eq("id", id);
       if (error) throw error;
       await loadNutritionToday(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
   const addWorkout = async (type, durationMin, completed, caloriesBurned = 0, notes = "") => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+    const data = { type, duration_min: Number(durationMin), completed: Boolean(completed), calories_burned: Number(caloriesBurned), notes };
+    const val = workoutSchema.safeParse(data);
+    if (!val.success) { setDataError(val.error.errors[0].message); return false; }
     setIsMutating(true);
     try {
-      const { error } = await supabase.from("workout_entries").insert({
-        user_id: user.id,
-        type,
-        duration_min: Number(durationMin) || 0,
-        calories_burned: Number(caloriesBurned) || 0,
-        completed: Boolean(completed),
-        notes: notes.trim(),
-        logged_at: new Date().toISOString()
-      });
+      const { error } = await supabase.from("workout_entries").insert({ user_id: user.id, ...data });
       if (error) throw error;
       await loadWorkoutsToday(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
-  const updateWorkout = async (entryId, { type, durationMin, completed, caloriesBurned, notes }) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+  const updateWorkout = async (id, { type, durationMin, completed, caloriesBurned, notes }) => {
+    const data = { type, duration_min: Number(durationMin), completed: Boolean(completed), calories_burned: Number(caloriesBurned), notes };
+    if (!idSchema.safeParse(id).success) return false;
+    const val = workoutSchema.safeParse(data);
+    if (!val.success) { setDataError(val.error.errors[0].message); return false; }
     setIsMutating(true);
     try {
-      const { error } = await supabase
-        .from("workout_entries")
-        .update({
-          type,
-          duration_min: Number(durationMin) || 0,
-          calories_burned: Number(caloriesBurned) || 0,
-          completed: Boolean(completed),
-          notes: notes?.trim()
-        })
-        .eq("id", entryId)
-        .eq("user_id", user.id);
-
+      const { error } = await supabase.from("workout_entries").update(data).eq("id", id);
       if (error) throw error;
       await loadWorkoutsToday(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
-  const deleteWorkout = async (entryId) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+  const deleteWorkout = async (id) => {
+    if (!idSchema.safeParse(id).success) return false;
     setIsMutating(true);
     try {
-      const { error } = await supabase
-        .from("workout_entries")
-        .delete()
-        .eq("id", entryId)
-        .eq("user_id", user.id);
-
+      const { error } = await supabase.from("workout_entries").delete().eq("id", id);
       if (error) throw error;
       await loadWorkoutsToday(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
   const addWeightLog = async (weightKg) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+    const data = { weight_kg: Number(weightKg) };
+    const val = weightLogSchema.safeParse(data);
+    if (!val.success) { setDataError(val.error.errors[0].message); return false; }
     setIsMutating(true);
     try {
-      const { error } = await supabase.from("weight_logs").insert({
-        user_id: user.id,
-        weight_kg: Number(weightKg),
-        logged_at: new Date().toISOString()
-      });
+      const { error } = await supabase.from("weight_logs").insert({ user_id: user.id, ...data });
       if (error) throw error;
-      // Также обновим текущий вес в профиле для удобства
-      await supabase.from("profiles").update({ weight_kg: Number(weightKg) }).eq("id", user.id);
+      await supabase.from("profiles").update({ weight_kg: data.weight_kg }).eq("id", user.id);
       await Promise.all([loadWeightLogs(user.id), loadProfile(user.id)]);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
   const deleteWeightLog = async (id) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+    if (!idSchema.safeParse(id).success) return false;
     setIsMutating(true);
     try {
-      const { error } = await supabase.from("weight_logs").delete().eq("id", id).eq("user_id", user.id);
+      const { error } = await supabase.from("weight_logs").delete().eq("id", id);
       if (error) throw error;
       await loadWeightLogs(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
-  const addGoal = async (title, targetValue, unit, deadline) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+  const addGoal = async (title, targetValue, unit) => {
+    const data = { title, target_value: Number(targetValue), unit };
+    const val = goalSchema.safeParse(data);
+    if (!val.success) { setDataError(val.error.errors[0].message); return false; }
     setIsMutating(true);
     try {
-      const { error } = await supabase.from("goals").insert({
-        user_id: user.id,
-        title: title.trim(),
-        target_value: Number(targetValue),
-        unit,
-        deadline: deadline || null
-      });
+      const { error } = await supabase.from("goals").insert({ user_id: user.id, ...data });
       if (error) throw error;
       await loadGoals(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
-  const updateGoal = async (id, { title, targetValue, currentValue, unit, deadline, completed }) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+  const updateGoal = async (id, { title, target_value, current_value, unit, deadline, completed }) => {
+    const data = { title, target_value: Number(target_value), current_value: Number(current_value), unit, deadline, completed };
+    if (!idSchema.safeParse(id).success) return false;
+    const val = goalSchema.safeParse(data);
+    if (!val.success) { setDataError(val.error.errors[0].message); return false; }
     setIsMutating(true);
     try {
-      const { error } = await supabase
-        .from("goals")
-        .update({
-          title,
-          target_value: Number(targetValue),
-          current_value: Number(currentValue),
-          unit,
-          deadline,
-          completed
-        })
-        .eq("id", id)
-        .eq("user_id", user.id);
+      const { error } = await supabase.from("goals").update(data).eq("id", id);
       if (error) throw error;
       await loadGoals(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
   const deleteGoal = async (id) => {
-    if (!supabase || !user?.id) return false;
-    setDataError("");
+    if (!idSchema.safeParse(id).success) return false;
     setIsMutating(true);
     try {
-      const { error } = await supabase.from("goals").delete().eq("id", id).eq("user_id", user.id);
+      const { error } = await supabase.from("goals").delete().eq("id", id);
       if (error) throw error;
       await loadGoals(user.id);
       return true;
-    } catch (e) {
-      setDataError(humanizeDataError(e));
-      return false;
-    } finally {
-      setIsMutating(false);
-    }
+    } catch (e) { setDataError(humanizeDataError(e)); return false; }
+    finally { setIsMutating(false); }
   };
 
-  const totals = useMemo(() => {
-    const caloriesToday = nutrition.reduce((sum, f) => sum + Number(f.calories), 0);
-    const caloriesBurnedToday = workouts.filter(w => w.completed).reduce((sum, w) => sum + Number(w.caloriesBurned || 0), 0);
-    const completedWorkouts = workouts.filter((w) => w.completed).length;
-    return { caloriesToday, caloriesBurnedToday, completedWorkouts };
-  }, [nutrition, workouts]);
-
-  const calorieGoal = Number(profile.dailyCalorieGoal) || 2000;
+  const totals = useMemo(() => ({
+    caloriesToday: nutrition.reduce((sum, f) => sum + Number(f.calories), 0),
+    caloriesBurnedToday: workouts.filter(w => w.completed).reduce((sum, w) => sum + Number(w.caloriesBurned || 0), 0)
+  }), [nutrition, workouts]);
 
   return {
-    isSupabaseConfigured,
-    user,
-    session,
-    authLoading,
-    authError,
-    setAuthError,
-    authInfo,
-    setAuthInfo,
-    isRefreshing,
-    isMutating,
-    dataError,
-    setDataError,
-    profile,
-    setProfile,
-    nutrition,
-    workouts,
-    weightLogs,
-    goals,
-    totals,
-    calorieGoal,
-    signIn,
-    signUp,
-    signOut,
-    saveProfile,
-    addFood,
-    updateFood,
-    deleteFood,
-    addWorkout,
-    updateWorkout,
-    deleteWorkout,
-    addWeightLog,
-    deleteWeightLog,
-    addGoal,
-    updateGoal,
-    deleteGoal,
-    refreshAll
+    isSupabaseConfigured, user, isAdmin, authLoading, authError, setAuthError, authInfo, setAuthInfo,
+    isRefreshing, isMutating, dataError, setDataError, profile, setProfile, allProfiles,
+    nutrition, workouts, weightLogs, goals, totals, calorieGoal: Number(profile.dailyCalorieGoal) || 2000,
+    signIn, signUp, signOut, saveProfile, addFood, updateFood, deleteFood, addWorkout, updateWorkout, deleteWorkout,
+    addWeightLog, deleteWeightLog, addGoal, updateGoal, deleteGoal, refreshAll
   };
 }
