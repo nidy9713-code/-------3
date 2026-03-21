@@ -196,7 +196,7 @@ export default function App() {
   
   // Состояния для новых записей
   const [newFood, setNewFood] = useState({ name: "", calories: "", mealType: "Перекус", weightG: "" });
-  const [newWorkout, setNewWorkout] = useState({ type: "Бег", duration: "", completed: true, caloriesBurned: "", notes: "" });
+  const [newWorkout, setNewWorkout] = useState({ type: "Бег", duration: "", notes: "" });
   const [newWeight, setNewWeight] = useState("");
   const [newGoal, setNewGoal] = useState({ title: "", target: "", unit: "мл" });
 
@@ -207,7 +207,7 @@ export default function App() {
   const [editingFoodId, setEditingFoodId] = useState(null);
   const [foodDraft, setFoodDraft] = useState({ name: "", calories: "", mealType: "Перекус", weightG: "" });
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
-  const [workoutDraft, setWorkoutDraft] = useState({ type: "Бег", duration: "", completed: true, caloriesBurned: "", notes: "" });
+  const [workoutDraft, setWorkoutDraft] = useState({ type: "Бег", duration: "", notes: "" });
 
   const {
     isSupabaseConfigured,
@@ -306,9 +306,10 @@ export default function App() {
     const isDurOk = validate("duration", newWorkout.duration, "workout");
     if (!isDurOk) return;
 
-    const ok = await addWorkout(newWorkout.type, newWorkout.duration, newWorkout.completed, newWorkout.caloriesBurned, newWorkout.notes);
+    // caloriesBurned defaults to 0, completed to true
+    const ok = await addWorkout(newWorkout.type, newWorkout.duration, true, 0, newWorkout.notes);
     if (ok) {
-      setNewWorkout({ type: "Бег", duration: "", completed: true, caloriesBurned: "", notes: "" });
+      setNewWorkout({ type: "Бег", duration: "", notes: "" });
     }
   };
 
@@ -448,13 +449,26 @@ export default function App() {
                 <FormField label="Возраст">
                   <Input type="number" value={profile.age} onChange={(e) => setProfile({ ...profile, age: e.target.value })} />
                 </FormField>
-                <FormField label="Telegram Chat ID" error={errors["profile.telegramChatId"]}>
+                <FormField label="Telegram ID для уведомлений" error={errors["profile.telegramChatId"]}>
                   <Input 
                     value={profile.telegramChatId} 
                     onChange={(e) => setProfile({ ...profile, telegramChatId: e.target.value })} 
                     placeholder="Напр: 123456789"
                   />
-                  <p className="mt-1 text-[10px] text-slate-400 font-medium">Узнать ID можно у бота @userinfobot</p>
+                  <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <p className="text-[10px] text-blue-800 font-bold uppercase mb-1">Как настроить:</p>
+                    <p className="text-[11px] text-blue-700 leading-relaxed">
+                      1. Запустите бота <b>@userinfobot</b> в Telegram.<br/>
+                      2. Скопируйте цифровой ID и вставьте выше.<br/>
+                      3. <b>Важно:</b> Бот должен быть запущен, иначе уведомления не придут.
+                    </p>
+                  </div>
+                  <div className="mt-2 p-3 bg-emerald-50 rounded-lg border border-emerald-100">
+                    <p className="text-[10px] text-emerald-800 font-bold uppercase mb-1">Какие уведомления придут:</p>
+                    <p className="text-[11px] text-emerald-700 leading-relaxed">
+                      Вы получите сообщение, когда сумма калорий за день достигнет или превысит вашу цель, установленную в разделе «Питание».
+                    </p>
+                  </div>
                 </FormField>
               </div>
             ) : (
@@ -464,9 +478,9 @@ export default function App() {
                 <StatCard title="Ваш возраст" value={`${profile.age || "—"} лет`} hint="Для обмена веществ" />
                 <StatCard title="Пол" value={profile.gender} hint="Физиология" />
                 <StatCard 
-                  title="Telegram" 
-                  value={profile.telegramChatId ? "Подключен" : "Не настроен"} 
-                  hint={profile.telegramChatId ? `ID: ${profile.telegramChatId}` : "Для уведомлений о целях"} 
+                  title="Уведомления" 
+                  value={profile.telegramChatId ? "Включены" : "Выключены"} 
+                  hint={profile.telegramChatId ? `ID: ${profile.telegramChatId}` : "Настройте в режиме редактирования"} 
                 />
               </div>
             )}
@@ -568,24 +582,15 @@ export default function App() {
         {activePage === "workouts" && (
           <div className="space-y-6">
             <SectionCard title="Новая тренировка">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 items-end">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-end">
                 <FormField label="Вид спорта">
                   <Select value={newWorkout.type} onChange={(e) => setNewWorkout({ ...newWorkout, type: e.target.value })} options={workoutTypes} />
                 </FormField>
                 <FormField label="Длительность (мин)" error={errors["workout.duration"]}>
                   <Input type="number" value={newWorkout.duration} error={errors["workout.duration"]} onChange={(e) => setNewWorkout({ ...newWorkout, duration: e.target.value })} />
                 </FormField>
-                <FormField label="Расход ккал">
-                  <Input type="number" value={newWorkout.caloriesBurned} onChange={(e) => setNewWorkout({ ...newWorkout, caloriesBurned: e.target.value })} />
-                </FormField>
-                <div className="flex items-center gap-4">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 font-medium">
-                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" checked={newWorkout.completed} onChange={(e) => setNewWorkout({ ...newWorkout, completed: e.target.checked })} />
-                    Выполнено
-                  </label>
-                  <ActionButton onClick={handleAddWorkout} disabled={isMutating} className="flex-1">Добавить</ActionButton>
-                </div>
-                <div className="sm:col-span-2 lg:col-span-4">
+                <ActionButton onClick={handleAddWorkout} disabled={isMutating} className="h-10">Добавить</ActionButton>
+                <div className="sm:col-span-2 lg:col-span-3">
                   <FormField label="Комментарий">
                     <Input value={newWorkout.notes} onChange={(e) => setNewWorkout({ ...newWorkout, notes: e.target.value })} placeholder="Напр: Сделал 3 подхода по 15" />
                   </FormField>
@@ -602,12 +607,11 @@ export default function App() {
                       {editingWorkoutId === w.id ? (
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-wrap items-end gap-3">
-                            <Select className="w-40" value={workoutDraft.type} onChange={(e) => setWorkoutDraft({ ...workoutDraft, type: e.target.value })} options={workoutTypes} />
-                            <Input className="w-20" type="number" value={workoutDraft.duration} onChange={(e) => setWorkoutDraft({ ...workoutDraft, duration: e.target.value })} />
-                            <Input className="w-20" type="number" value={workoutDraft.caloriesBurned} onChange={(e) => setWorkoutDraft({ ...workoutDraft, caloriesBurned: e.target.value })} />
+                            <Select className="flex-1" value={workoutDraft.type} onChange={(e) => setWorkoutDraft({ ...workoutDraft, type: e.target.value })} options={workoutTypes} />
+                            <Input className="w-32" type="number" value={workoutDraft.duration} onChange={(e) => setWorkoutDraft({ ...workoutDraft, duration: e.target.value })} />
                             <div className="flex gap-2">
                               <ActionButton onClick={async () => {
-                                const ok = await updateWorkout(w.id, { ...workoutDraft, durationMin: workoutDraft.duration });
+                                const ok = await updateWorkout(w.id, { ...workoutDraft, durationMin: workoutDraft.duration, completed: true, caloriesBurned: 0 });
                                 if (ok) setEditingWorkoutId(null);
                               }}>OK</ActionButton>
                               <ActionButton variant="outline" onClick={() => setEditingWorkoutId(null)}>Отмена</ActionButton>
@@ -619,18 +623,18 @@ export default function App() {
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                              <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-lg ${w.completed ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>
-                                {w.completed ? "✓" : "○"}
+                              <div className="h-10 w-10 rounded-xl flex items-center justify-center text-lg bg-emerald-100 text-emerald-600">
+                                ✓
                               </div>
                               <div>
                                 <p className="font-bold text-slate-900">{w.type}</p>
-                                <p className="text-xs text-slate-500 font-medium">{w.duration} мин • {w.calories_burned} ккал</p>
+                                <p className="text-xs text-slate-500 font-medium">{w.duration} мин</p>
                               </div>
                             </div>
                             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
                               <ActionButton variant="outline" onClick={() => {
                                 setEditingWorkoutId(w.id);
-                                setWorkoutDraft({ type: w.type, duration: w.duration, completed: w.completed, caloriesBurned: w.calories_burned || "", notes: w.notes || "" });
+                                setWorkoutDraft({ type: w.type, duration: w.duration, notes: w.notes || "" });
                               }}>Изм.</ActionButton>
                               <ActionButton variant="danger" onClick={() => window.confirm("Удалить запись?") && deleteWorkout(w.id)}>Уд.</ActionButton>
                             </div>
