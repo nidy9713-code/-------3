@@ -26,6 +26,7 @@ export const loginSchema = z.object({
 
 export const profileUpdateSchema = z.object({
   display_name: z.string().min(2).max(50).optional(),
+  telegram_chat_id: z.string().regex(/^\d+$/, { message: "Chat ID должен состоять только из цифр" }).optional().nullable(),
   weight_kg: z.number().positive({ message: "Вес должен быть больше 0" }).optional().nullable(),
   height_cm: z.number().positive({ message: "Рост должен быть больше 0" }).optional().nullable(),
   age: z.number().min(0).max(120, { message: "Возраст от 0 до 120" }).optional().nullable(),

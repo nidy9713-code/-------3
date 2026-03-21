@@ -267,7 +267,23 @@ export default function App() {
 
   const handleProfileAction = async () => {
     if (profile.isEditing) {
-      if (!validate("displayName", profile.displayName, "profile")) return;
+      const isNameOk = validate("displayName", profile.displayName, "profile");
+      
+      // Добавим проверку цифр для Telegram ID прямо здесь для мгновенной реакции
+      let isTgOk = true;
+      if (profile.telegramChatId && !/^\d+$/.test(profile.telegramChatId)) {
+        setErrors(prev => ({ ...prev, "profile.telegramChatId": "Только цифры (узнайте в @userinfobot)" }));
+        isTgOk = false;
+      } else {
+        setErrors(prev => {
+          const next = { ...prev };
+          delete next["profile.telegramChatId"];
+          return next;
+        });
+      }
+
+      if (!isNameOk || !isTgOk) return;
+      
       const ok = await saveProfile();
       if (ok) setProfile((p) => ({ ...p, isEditing: false }));
     } else {
@@ -432,6 +448,14 @@ export default function App() {
                 <FormField label="Возраст">
                   <Input type="number" value={profile.age} onChange={(e) => setProfile({ ...profile, age: e.target.value })} />
                 </FormField>
+                <FormField label="Telegram Chat ID" error={errors["profile.telegramChatId"]}>
+                  <Input 
+                    value={profile.telegramChatId} 
+                    onChange={(e) => setProfile({ ...profile, telegramChatId: e.target.value })} 
+                    placeholder="Напр: 123456789"
+                  />
+                  <p className="mt-1 text-[10px] text-slate-400 font-medium">Узнать ID можно у бота @userinfobot</p>
+                </FormField>
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -439,6 +463,11 @@ export default function App() {
                 <StatCard title="Текущий вес" value={`${profile.weight || "—"} кг`} hint="Обновляется из истории" />
                 <StatCard title="Ваш возраст" value={`${profile.age || "—"} лет`} hint="Для обмена веществ" />
                 <StatCard title="Пол" value={profile.gender} hint="Физиология" />
+                <StatCard 
+                  title="Telegram" 
+                  value={profile.telegramChatId ? "Подключен" : "Не настроен"} 
+                  hint={profile.telegramChatId ? `ID: ${profile.telegramChatId}` : "Для уведомлений о целях"} 
+                />
               </div>
             )}
           </SectionCard>

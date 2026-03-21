@@ -34,6 +34,7 @@ export function useTrackerData() {
   const [profile, setProfile] = useState({
     displayName: "",
     avatarUrl: "",
+    telegramChatId: "",
     role: "user",
     gender: "male",
     height: "",
@@ -100,7 +101,7 @@ export function useTrackerData() {
     if (!supabase) return;
     const { data, error } = await supabase
       .from("profiles")
-      .select("display_name,avatar_url,role,gender,height_cm,weight_kg,age,daily_calorie_goal")
+      .select("display_name,avatar_url,role,gender,height_cm,weight_kg,age,daily_calorie_goal,telegram_chat_id")
       .eq("id", uid)
       .maybeSingle();
 
@@ -114,6 +115,7 @@ export function useTrackerData() {
       ...p,
       displayName: data.display_name ?? "",
       avatarUrl: data.avatar_url ?? "",
+      telegramChatId: data.telegram_chat_id ?? "",
       role: data.role ?? "user",
       gender: data.gender ?? "male",
       height: data.height_cm != null ? String(data.height_cm) : "",
@@ -237,6 +239,7 @@ export function useTrackerData() {
     if (!user?.id) return false;
     const data = {
       display_name: profile.displayName,
+      telegram_chat_id: profile.telegramChatId || null,
       gender: profile.gender,
       height_cm: profile.height === "" ? null : Number(profile.height),
       weight_kg: profile.weight === "" ? null : Number(profile.weight),

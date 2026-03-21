@@ -104,10 +104,34 @@ npm run preview
 ## Структура данных
 
 Таблицы в Supabase (см. **`backend/sql/schema.sql`**):
-- **`profiles`** — данные пользователя и цель калорий.
+- **`profiles`** — данные пользователя, цель калорий, **Telegram Chat ID**.
 - **`nutrition_entries`** — дневник питания (название, ккал, тип приема пищи).
 - **`workout_entries`** — дневник тренировок (тип, длительность, сожженные калории).
 - **`weight_logs`** — история веса.
 - **`goals`** — прочие цели (вода, шаги и т.д.).
 
 Для **редактирования и удаления** записей в дневниках в RLS нужны **`UPDATE` и `DELETE`** для строк с `user_id = auth.uid()`.
+
+## Интеграция с Telegram
+
+Бот уведомляет пользователя, когда дневная норма калорий достигнута.
+
+### Настройка
+
+1. **Создайте бота** через [@BotFather](https://t.me/BotFather), получите **API Token**.
+2. **Настройте Supabase Secrets**:
+   ```bash
+   supabase secrets set TELEGRAM_BOT_TOKEN=ваш_токен
+   ```
+3. **Разверните Edge Function**:
+   ```bash
+   supabase functions deploy notify-goal-reached
+   ```
+4. **Настройте Database Webhook** в Supabase Dashboard:
+   - **Database** -> **Webhooks** -> **Create Webhook**.
+   - Таблица: `nutrition_entries`, Событие: `Insert`.
+   - URL: `https://[PROJECT_ID].supabase.co/functions/v1/notify-goal-reached`.
+   - Header: `Authorization: Bearer [SERVICE_ROLE_KEY]`.
+5. **В приложении**:
+   - Перейдите в **Профиль**.
+   - Укажите свой **Telegram Chat ID** (можно узнать через [@userinfobot](https://t.me/userinfobot)).
