@@ -246,7 +246,8 @@ export default function App() {
     addGoal,
     updateGoal,
     deleteGoal,
-    refreshAll
+    refreshAll,
+    uploadAvatar
   } = useTrackerData();
 
   const navPages = isAdmin ? adminPages : pages;
@@ -289,6 +290,12 @@ export default function App() {
     } else {
       setProfile((p) => ({ ...p, isEditing: true }));
     }
+  };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    await uploadAvatar(file);
   };
 
   const handleAddFood = async () => {
@@ -434,6 +441,23 @@ export default function App() {
                     onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
                     placeholder="Александр"
                   />
+                </FormField>
+                <FormField label="Фото профиля (PNG, JPG, PDF до 5МБ)">
+                  <div className="flex items-center gap-4">
+                    {profile.avatarUrl && (
+                      <img 
+                        src={profile.avatarUrl} 
+                        alt="Avatar" 
+                        className="h-12 w-12 rounded-full object-cover ring-2 ring-emerald-100" 
+                      />
+                    )}
+                    <input 
+                      type="file" 
+                      accept=".png,.jpg,.jpeg,.pdf"
+                      onChange={handleFileChange}
+                      className="text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                    />
+                  </div>
                 </FormField>
                 <FormField label="Пол">
                   <Select

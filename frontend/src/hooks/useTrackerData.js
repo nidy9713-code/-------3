@@ -417,6 +417,59 @@ export function useTrackerData() {
     finally { setIsMutating(false); }
   };
 
+  const uploadAvatar = async (file) => {
+    if (!user?.id || !supabase) return null;
+
+    // 1. Ограничение размера (5 МБ)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setDataError("Файл слишком большой. Максимум 5 МБ.");
+      return null;
+    }
+
+    // 2. Ограничение типов
+    const allowedTypes = ['image/png', 'image/jpeg', 'application/pdf'];
+    if (!allowedTypes.includes(file.type)) {
+      setDataError("Разрешены только PNG, JPG и PDF.");
+      return null;
+    }
+
+    // 3. Переименование (UUID пользователя + timestamp)
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+    setIsMutating(true);
+    try {
+      // Загрузка в Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Получение публичного URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      // Обновление профиля в БД
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+
+      if (dbError) throw dbError;
+
+      await loadProfile(user.id);
+      return publicUrl;
+    } catch (e) {
+      setDataError(humanizeDataError(e));
+      return null;
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const totals = useMemo(() => ({
     caloriesToday: nutrition.reduce((sum, f) => sum + Number(f.calories), 0),
     caloriesBurnedToday: workouts.filter(w => w.completed).reduce((sum, w) => sum + Number(w.caloriesBurned || 0), 0)
@@ -427,6 +480,6 @@ export function useTrackerData() {
     isRefreshing, isMutating, dataError, setDataError, profile, setProfile, allProfiles,
     nutrition, workouts, weightLogs, goals, totals, calorieGoal: Number(profile.dailyCalorieGoal) || 2000,
     signIn, signUp, signOut, saveProfile, addFood, updateFood, deleteFood, addWorkout, updateWorkout, deleteWorkout,
-    addWeightLog, deleteWeightLog, addGoal, updateGoal, deleteGoal, refreshAll
+    addWeightLog, deleteWeightLog, addGoal, updateGoal, deleteGoal, refreshAll, uploadAvatar
   };
 }
