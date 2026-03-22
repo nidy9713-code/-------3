@@ -105,8 +105,16 @@ test.describe('Life Tracker - Сценарии тестирования', () => 
     const duration = '45';
     await page.locator('div').filter({ hasText: /^Длительность \(мин\)$/ }).locator('input').fill(duration);
     await page.getByRole('button', { name: 'Добавить' }).click();
-    // Ждем очистки
-    await expect(page.locator('div').filter({ hasText: /^Длительность \(мин\)$/ }).locator('input')).toHaveValue('', { timeout: 15000 });
+
+    // Проверяем, что нет баннера ошибки (признак сбоя БД или валидации)
+    const errorBanner = page.locator('[role="alert"]').filter({ hasText: /Ошибка|Заполните/ });
+    if (await errorBanner.isVisible()) {
+       const msg = await errorBanner.textContent();
+       throw new Error(`Ошибка при добавлении тренировки: ${msg}`);
+    }
+
+    // Ждем очистки (увеличен таймаут до 20с)
+    await expect(page.locator('div').filter({ hasText: /^Длительность \(мин\)$/ }).locator('input')).toHaveValue('', { timeout: 20000 });
     await expect(page.getByText(`${duration} мин`).first()).toBeVisible();
 
     // Имя

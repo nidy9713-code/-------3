@@ -310,6 +310,8 @@ export default function App() {
     const ok = await addWorkout(newWorkout.type, newWorkout.duration, true, 0, newWorkout.notes);
     if (ok) {
       setNewWorkout({ type: "Бег", duration: "", notes: "" });
+    } else {
+      console.error("Ошибка при добавлении тренировки:", dataError);
     }
   };
 
