@@ -206,9 +206,10 @@ export function useTrackerData() {
   const signIn = async (email, password) => {
     const val = loginSchema.safeParse({ email, password });
     if (!val.success) {
-      setAuthError(val.error.errors[0].message);
+      setAuthError(val.error.errors[0]?.message || "Ошибка валидации");
       return false;
     }
+    if (!supabase) return false;
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) setAuthError(translateAuthError(error));
     return !error;
@@ -217,9 +218,10 @@ export function useTrackerData() {
   const signUp = async (email, password, name) => {
     const val = registerSchema.safeParse({ email, password, name });
     if (!val.success) {
-      setAuthError(val.error.errors[0].message);
+      setAuthError(val.error.errors[0]?.message || "Ошибка валидации");
       return false;
     }
+    if (!supabase) return false;
     const { data, error } = await supabase.auth.signUp({ 
       email: email.trim(), 
       password, 

@@ -11,7 +11,7 @@ export const idSchema = z.string().uuid({ message: "Некорректный ф�
 
 export const registerSchema = z.object({
   email: z.string().email({ message: "Некорректный формат email" }),
-  password: z.string().min(6, { message: "Минимум 6 символов" }).max(8, { message: "Максимум 8 символов" }),
+  password: z.string().min(6, { message: "Минимум 6 символов" }),
   name: z.string().min(2, { message: "Минимум 2 символа" }).max(50, { message: "Максимум 50 символов" }),
 });
 

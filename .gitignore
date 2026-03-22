@@ -32,4 +32,7 @@ backend/supabase/.branches
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Playwright
+playwright-report/
+test-results/
+test-results*
