@@ -53,7 +53,7 @@ async function ensureLogin(page) {
   await expect(profileHeading).toBeVisible();
 }
 
-test.describe('Life Tracker - Сценарии тестирования', () => {
+test.describe('Трекер целей - Сценарии тестирования', () => {
   // Выполняем тесты по одному для стабильности
   test.describe.configure({ mode: 'serial' });
 

@@ -365,7 +365,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-100 px-4 py-16">
         <main className="mx-auto max-w-4xl">
           <div className="text-center mb-10">
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">LIFE TRACKER</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">ТРЕКЕР ЦЕЛЕЙ</h1>
             <p className="text-slate-500 mt-2 font-medium">Ваше здоровье в одной системе</p>
           </div>
           <AuthScreen
@@ -390,7 +390,7 @@ export default function App() {
               {profile.displayName ? profile.displayName[0].toUpperCase() : "U"}
             </div>
             <div>
-              <h1 className="text-xl font-black text-slate-900 leading-none">LIFE TRACKER</h1>
+              <h1 className="text-xl font-black text-slate-900 leading-none">ТРЕКЕР ЦЕЛЕЙ</h1>
               <p className="text-sm text-slate-500 mt-1 font-medium">
                 {profile.displayName ? `Привет, ${profile.displayName}!` : "Добро пожаловать!"}
                 {isAdmin && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase">Admin</span>}
