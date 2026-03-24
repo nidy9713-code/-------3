@@ -2,7 +2,7 @@ meta:
   name: goal-tracker
   toolchain:
     name: node
-    version: 18
+    version: 20
 build:
   # Устанавливаем зависимости и собираем фронтенд
   install: npm install && npm install --prefix frontend
