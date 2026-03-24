@@ -4,9 +4,7 @@ meta:
     name: node
     version: 20
 build:
-  # Устанавливаем зависимости и собираем фронтенд
-  install: npm install && npm install --prefix frontend
-  command: npm run build
+  install: npm install && cd frontend && npm install && npm run build
+  command: echo "Build complete"
 run:
-  # Используем serve для раздачи статического фронтенда на порту 80
-  command: npm start
+  command: npx serve -s frontend/dist -l 80
