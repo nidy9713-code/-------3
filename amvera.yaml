@@ -1,10 +1,9 @@
 meta:
-  name: goal-tracker
+  environment: node
   toolchain:
-    name: node
+    name: npm
     version: 20
 build:
-  install: npm install && cd frontend && npm install && npm run build
-  command: echo "Build complete"
+  additionalCommands: cd frontend && npm install && npm run build
 run:
-  command: npx serve -s frontend/dist -l 80
+  command: npm start
