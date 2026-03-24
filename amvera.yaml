@@ -1,0 +1,12 @@
+meta:
+  name: goal-tracker
+  toolchain:
+    name: node
+    version: 18
+build:
+  # Устанавливаем зависимости и собираем фронтенд
+  install: npm install && npm install --prefix frontend
+  command: npm run build
+run:
+  # Используем serve для раздачи статического фронтенда на порту 80
+  command: npm start

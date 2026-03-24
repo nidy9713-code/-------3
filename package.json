@@ -5,11 +5,13 @@
   "scripts": {
     "dev": "npm run dev --prefix frontend -- --host",
     "build": "npm run build --prefix frontend",
+    "start": "npx serve -s frontend/dist -l 80",
     "preview": "npm run preview --prefix frontend",
     "install:frontend": "npm install --prefix frontend",
     "test": "npx playwright test"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.58.2",
+    "serve": "^14.2.4"
   }
 }
