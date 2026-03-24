@@ -1,4 +1,5 @@
 meta:
+  name: Goal Tracker
   environment: node
   toolchain:
     name: npm
