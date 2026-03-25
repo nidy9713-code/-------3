@@ -142,7 +142,16 @@ create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, display_name, role)
-  values (new.id, new.raw_user_meta_data->>'display_name', 'user');
+  values (
+    new.id, 
+    coalesce(new.raw_user_meta_data->>'display_name', ''), 
+    'user'
+  );
+
+  -- Логируем регистрацию пользователя
+  insert into public.backend_logs (level, event_type, user_id, metadata)
+  values ('INFO', 'BUSINESS_EVENT', new.id, jsonb_build_object('action', 'USER_REGISTERED', 'email', new.email));
+  
   return new;
 end;
 $$ language plpgsql security definer;

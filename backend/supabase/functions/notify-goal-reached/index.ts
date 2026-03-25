@@ -1,19 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { Logger } from "../_shared/logger.ts"
 
 const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
 serve(async (req) => {
-  console.log(`[LOG] Request received: ${req.method} ${req.url}`)
+  const startTime = Date.now()
+  let statusCode = 200
+  let payload: any = {}
+  let result: any = {}
 
   try {
-    const payload = await req.json()
+    payload = await req.json()
     const { record } = payload
     const userId = record.user_id
-
-    console.log(`[LOG] Processing nutrition entry for user: ${userId}`)
 
     const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -25,15 +27,15 @@ serve(async (req) => {
       .single()
 
     if (profileErr || !profile?.telegram_chat_id) {
-      console.log(`[LOG] Telegram integration not active or profile error: ${profileErr?.message || 'No chat ID'}`)
-      return new Response(JSON.stringify({ skipped: 'No telegram ID' }), { status: 200 })
+      result = { skipped: 'No telegram ID', reason: profileErr?.message || 'No chat ID' }
+      return new Response(JSON.stringify(result), { status: 200 })
     }
 
     // 2. Проверяем, не отправляли ли уже сегодня уведомление
     const today = new Date().toISOString().split('T')[0]
     if (profile.last_notified_date === today) {
-      console.log(`[LOG] Notification already sent today for user ${userId}`)
-      return new Response(JSON.stringify({ skipped: 'Already notified today' }), { status: 200 })
+      result = { skipped: 'Already notified today' }
+      return new Response(JSON.stringify(result), { status: 200 })
     }
 
     // 3. Считаем сумму калорий за сегодня
@@ -49,14 +51,11 @@ serve(async (req) => {
     if (sumErr) throw sumErr
 
     const totalCalories = (entries || []).reduce((sum, entry) => sum + (entry.calories || 0), 0)
-    console.log(`[LOG] User ${userId} total calories: ${totalCalories}, goal: ${profile.daily_calorie_goal}`)
 
     // 4. Если цель достигнута — отправляем в Telegram
     if (totalCalories >= profile.daily_calorie_goal) {
       const message = `🔔 Внимание, ${profile.display_name || 'пользователь'}!\n\nДневная норма калорий (${profile.daily_calorie_goal} ккал) достигнута или превышена.\n\nТекущий показатель: ${totalCalories} ккал.`
 
-      console.log(`[LOG] Sending telegram message to ${profile.telegram_chat_id}...`)
-      
       const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -68,12 +67,11 @@ serve(async (req) => {
       })
 
       const tgData = await tgRes.json()
-      console.log(`[LOG] Telegram response:`, JSON.stringify(tgData))
 
       if (!tgRes.ok) {
-        console.error(`[ERROR] Telegram API failed: ${tgData.description}`)
-        // Не блокируем действие, просто выходим
-        return new Response(JSON.stringify({ error: 'Telegram failed' }), { status: 200 })
+        statusCode = 502
+        result = { error: 'Telegram API failed', description: tgData.description }
+        return new Response(JSON.stringify(result), { status: 200 })
       }
 
       // 5. Помечаем, что уведомили сегодня
@@ -82,13 +80,38 @@ serve(async (req) => {
         .update({ last_notified_date: today })
         .eq('id', userId)
 
-      return new Response(JSON.stringify({ success: true }), { status: 200 })
+      // Бизнес-событие: уведомление успешно отправлено
+      await Logger.log({
+        level: 'INFO',
+        eventType: 'BUSINESS_EVENT',
+        userId,
+        metadata: { action: 'TELEGRAM_GOAL_NOTIFIED', calories: totalCalories, goal: profile.daily_calorie_goal }
+      })
+
+      result = { success: true }
+      return new Response(JSON.stringify(result), { status: 200 })
     }
 
-    return new Response(JSON.stringify({ status: 'Goal not yet reached' }), { status: 200 })
+    result = { status: 'Goal not yet reached', calories: totalCalories }
+    return new Response(JSON.stringify(result), { status: 200 })
 
   } catch (err) {
-    console.error(`[CRITICAL ERROR]`, err.message)
-    return new Response(JSON.stringify({ error: err.message }), { status: 200 })
+    statusCode = 500
+    result = { error: err.message }
+    await Logger.error(err.message, err.stack, { context: 'notify-goal-reached' })
+    return new Response(JSON.stringify(result), { status: 200 })
+  } finally {
+    // Логируем сам HTTP-запрос (метод, URL, статус, время)
+    const durationMs = Date.now() - startTime
+    await Logger.log({
+      level: statusCode >= 400 ? 'ERROR' : 'INFO',
+      eventType: 'REQUEST',
+      method: req.method,
+      url: req.url,
+      statusCode,
+      durationMs,
+      payload: payload, // Санитизация внутри логгера
+      response: result
+    })
   }
 })
