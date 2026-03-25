@@ -4,6 +4,6 @@ meta:
     name: npm
     version: 20
 build:
-  additionalCommands: cd frontend && npm install && npm run build
+  additionalCommands: npm install && cd frontend && npm install && npm run build
 run:
   command: npm start
