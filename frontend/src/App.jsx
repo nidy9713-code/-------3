@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { YMInitializer } from 'react-yandex-metrika';
 import {
   ActionButton,
   EmptyState,
@@ -352,6 +353,16 @@ export default function App() {
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <YMInitializer 
+          accounts={[108238508]} 
+          options={{ 
+            webvisor: true, 
+            clickmap: true, 
+            trackLinks: true, 
+            accurateTrackBounce: true 
+          }} 
+          version="2" 
+        />
         <div className="text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent mx-auto mb-4" />
           <p className="text-slate-600 font-medium">Загрузка...</p>
@@ -363,6 +374,16 @@ export default function App() {
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-100 px-4 py-16">
+        <YMInitializer 
+          accounts={[108238508]} 
+          options={{ 
+            webvisor: true, 
+            clickmap: true, 
+            trackLinks: true, 
+            accurateTrackBounce: true 
+          }} 
+          version="2" 
+        />
         <main className="mx-auto max-w-4xl">
           <div className="text-center mb-10">
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">ТРЕКЕР ЦЕЛЕЙ</h1>
@@ -383,6 +404,16 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100">
+      <YMInitializer 
+        accounts={[12345678]} 
+        options={{ 
+          webvisor: true, 
+          clickmap: true, 
+          trackLinks: true, 
+          accurateTrackBounce: true 
+        }} 
+        version="2" 
+      />
       <main className="mx-auto max-w-5xl px-4 py-8">
         <header className="mb-8 flex flex-wrap items-center justify-between gap-6">
           <div className="flex items-center gap-4">
