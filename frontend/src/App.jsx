@@ -119,7 +119,11 @@ function AuthScreen({
       if (isLogin) {
         await onSignIn(email, password);
       } else {
-        await onSignUp(email, password, displayName);
+        const success = await onSignUp(email, password, displayName);
+        if (success || authInfo) {
+          // Цель: Успешная регистрация
+          if (window.ym) window.ym(108238508, 'reachGoal', 'registration_success');
+        }
       }
     } finally {
       setAuthSubmitting(false);
@@ -306,6 +310,7 @@ export default function App() {
 
     const ok = await addFood(newFood.name, newFood.calories, newFood.mealType, newFood.weightG);
     if (ok) {
+      if (window.ym) window.ym(108238508, 'reachGoal', 'add_food_success');
       setNewFood({ name: "", calories: "", mealType: "Перекус", weightG: "" });
     }
   };
@@ -317,6 +322,7 @@ export default function App() {
     // caloriesBurned defaults to 0, completed to true
     const ok = await addWorkout(newWorkout.type, newWorkout.duration, true, 0, newWorkout.notes);
     if (ok) {
+      if (window.ym) window.ym(108238508, 'reachGoal', 'add_workout_success');
       setNewWorkout({ type: "Бег", duration: "", notes: "" });
     } else {
       console.error("Ошибка при добавлении тренировки:", dataError);
