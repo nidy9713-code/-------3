@@ -201,7 +201,7 @@ export default function App() {
   
   // Состояния для новых записей
   const [newFood, setNewFood] = useState({ name: "", calories: "", mealType: "Перекус", weightG: "" });
-  const [newWorkout, setNewWorkout] = useState({ type: "Бег", duration: "", notes: "" });
+  const [newWorkout, setNewWorkout] = useState({ type: "Бег", duration: "", caloriesBurned: "", notes: "" });
   const [newWeight, setNewWeight] = useState("");
   const [newGoal, setNewGoal] = useState({ title: "", target: "", unit: "мл" });
 
@@ -212,7 +212,7 @@ export default function App() {
   const [editingFoodId, setEditingFoodId] = useState(null);
   const [foodDraft, setFoodDraft] = useState({ name: "", calories: "", mealType: "Перекус", weightG: "" });
   const [editingWorkoutId, setEditingWorkoutId] = useState(null);
-  const [workoutDraft, setWorkoutDraft] = useState({ type: "Бег", duration: "", notes: "" });
+  const [workoutDraft, setWorkoutDraft] = useState({ type: "Бег", duration: "", caloriesBurned: "", notes: "" });
 
   const {
     isSupabaseConfigured,
@@ -317,13 +317,13 @@ export default function App() {
 
   const handleAddWorkout = async () => {
     const isDurOk = validate("duration", newWorkout.duration, "workout");
-    if (!isDurOk) return;
+    const isCalOk = validate("caloriesBurned", newWorkout.caloriesBurned, "workout");
+    if (!isDurOk || !isCalOk) return;
 
-    // caloriesBurned defaults to 0, completed to true
-    const ok = await addWorkout(newWorkout.type, newWorkout.duration, true, 0, newWorkout.notes);
+    const ok = await addWorkout(newWorkout.type, newWorkout.duration, true, newWorkout.caloriesBurned, newWorkout.notes);
     if (ok) {
       if (window.ym) window.ym(108238508, 'reachGoal', 'add_workout_success');
-      setNewWorkout({ type: "Бег", duration: "", notes: "" });
+      setNewWorkout({ type: "Бег", duration: "", caloriesBurned: "", notes: "" });
     } else {
       console.error("Ошибка при добавлении тренировки:", dataError);
     }
@@ -645,15 +645,18 @@ export default function App() {
         {activePage === "workouts" && (
           <div className="space-y-6">
             <SectionCard title="Новая тренировка">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-end">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 items-end">
                 <FormField label="Вид спорта">
                   <Select value={newWorkout.type} onChange={(e) => setNewWorkout({ ...newWorkout, type: e.target.value })} options={workoutTypes} />
                 </FormField>
                 <FormField label="Длительность (мин)" error={errors["workout.duration"]}>
                   <Input type="number" value={newWorkout.duration} error={errors["workout.duration"]} onChange={(e) => setNewWorkout({ ...newWorkout, duration: e.target.value })} />
                 </FormField>
+                <FormField label="Сожжено (ккал)" error={errors["workout.caloriesBurned"]}>
+                  <Input type="number" value={newWorkout.caloriesBurned} error={errors["workout.caloriesBurned"]} onChange={(e) => setNewWorkout({ ...newWorkout, caloriesBurned: e.target.value })} />
+                </FormField>
                 <ActionButton onClick={handleAddWorkout} disabled={isMutating} className="h-10">Добавить</ActionButton>
-                <div className="sm:col-span-2 lg:col-span-3">
+                <div className="sm:col-span-2 lg:col-span-4">
                   <FormField label="Комментарий">
                     <Input value={newWorkout.notes} onChange={(e) => setNewWorkout({ ...newWorkout, notes: e.target.value })} placeholder="Напр: Сделал 3 подхода по 15" />
                   </FormField>
@@ -671,10 +674,11 @@ export default function App() {
                         <div className="flex flex-col gap-3">
                           <div className="flex flex-wrap items-end gap-3">
                             <Select className="flex-1" value={workoutDraft.type} onChange={(e) => setWorkoutDraft({ ...workoutDraft, type: e.target.value })} options={workoutTypes} />
-                            <Input className="w-32" type="number" value={workoutDraft.duration} onChange={(e) => setWorkoutDraft({ ...workoutDraft, duration: e.target.value })} />
+                            <Input className="w-24" type="number" placeholder="Мин" value={workoutDraft.duration} onChange={(e) => setWorkoutDraft({ ...workoutDraft, duration: e.target.value })} />
+                            <Input className="w-24" type="number" placeholder="Ккал" value={workoutDraft.caloriesBurned} onChange={(e) => setWorkoutDraft({ ...workoutDraft, caloriesBurned: e.target.value })} />
                             <div className="flex gap-2">
                               <ActionButton onClick={async () => {
-                                const ok = await updateWorkout(w.id, { ...workoutDraft, durationMin: workoutDraft.duration, completed: true, caloriesBurned: 0 });
+                                const ok = await updateWorkout(w.id, { ...workoutDraft, durationMin: workoutDraft.duration, completed: true, caloriesBurned: workoutDraft.caloriesBurned });
                                 if (ok) setEditingWorkoutId(null);
                               }}>OK</ActionButton>
                               <ActionButton variant="outline" onClick={() => setEditingWorkoutId(null)}>Отмена</ActionButton>
@@ -691,13 +695,13 @@ export default function App() {
                               </div>
                               <div>
                                 <p className="font-bold text-slate-900">{w.type}</p>
-                                <p className="text-xs text-slate-500 font-medium">{w.duration} мин</p>
+                                <p className="text-xs text-slate-500 font-medium">{w.duration} мин • {w.caloriesBurned || 0} ккал</p>
                               </div>
                             </div>
                             <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition">
                               <ActionButton variant="outline" onClick={() => {
                                 setEditingWorkoutId(w.id);
-                                setWorkoutDraft({ type: w.type, duration: w.duration, notes: w.notes || "" });
+                                setWorkoutDraft({ type: w.type, duration: w.duration, caloriesBurned: w.caloriesBurned || "", notes: w.notes || "" });
                               }}>Изм.</ActionButton>
                               <ActionButton variant="danger" onClick={() => window.confirm("Удалить запись?") && deleteWorkout(w.id)}>Уд.</ActionButton>
                             </div>
